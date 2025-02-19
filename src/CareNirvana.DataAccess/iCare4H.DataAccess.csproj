@@ -1,0 +1,26 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Npgsql" Version="9.0.2" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Impl\Oracle\" />
+    <Folder Include="Impl\Sqlserver\" />
+    <Folder Include="Scripts\Oracle\" />
+    <Folder Include="Scripts\Sqlserver\" />
+    <Folder Include="Scripts\Postgres\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\iCare4H.Common\iCare4H.Common.csproj" />
+  </ItemGroup>
+
+</Project>

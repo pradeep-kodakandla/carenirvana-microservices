@@ -1,0 +1,6 @@
+@iCare4HService_HostAddress = http://localhost:5288
+
+GET {{iCare4HService_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

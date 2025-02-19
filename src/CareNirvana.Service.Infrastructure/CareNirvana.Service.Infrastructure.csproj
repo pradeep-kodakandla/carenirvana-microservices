@@ -1,0 +1,34 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Impl\Oracle\**" />
+    <Compile Remove="Impl\Sqlserver\**" />
+    <EmbeddedResource Remove="Impl\Oracle\**" />
+    <EmbeddedResource Remove="Impl\Sqlserver\**" />
+    <None Remove="Impl\Oracle\**" />
+    <None Remove="Impl\Sqlserver\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+    <PackageReference Include="Npgsql" Version="9.0.2" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\CareNirvana.Service.Application\CareNirvana.Service.Application.csproj" />
+    <ProjectReference Include="..\CareNirvana.Service.Common\CareNirvana.Service.Common.csproj" />
+    <ProjectReference Include="..\CareNirvana.Service.Domain\CareNirvana.Service.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Scripts\Postgres\" />
+  </ItemGroup>
+
+</Project>
