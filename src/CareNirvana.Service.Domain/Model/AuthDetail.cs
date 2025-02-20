@@ -11,5 +11,6 @@ namespace CareNirvana.Service.Domain.Model
         public int Id { get; set; }
         public List<object> Data { get; set; } // Change from string to List<object>
         public DateTime CreatedOn { get; set; }
+        public string AuthNumber { get; set; }
     }
 }

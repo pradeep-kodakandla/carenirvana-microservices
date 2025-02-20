@@ -22,7 +22,8 @@ namespace CareNirvana.Service.Application.UseCases
             var authDetail = new AuthDetail
             {
                 Data = jsonData.Data,
-                CreatedOn = System.DateTime.UtcNow
+                CreatedOn = System.DateTime.UtcNow,
+                AuthNumber = jsonData.AuthNumber,
             };
 
             await _repository.SaveAsync(authDetail);

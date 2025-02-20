@@ -30,7 +30,7 @@ namespace CareNirvana.Service.API.Controllers
         {
             try
             {
-                if (authDetail == null || authDetail.Data == null || !authDetail.Data.Any())
+                if (authDetail == null || authDetail.Data == null || !authDetail.Data.Any() || authDetail.AuthNumber == null)
                 {
                     return BadRequest("Invalid data received");
                 }

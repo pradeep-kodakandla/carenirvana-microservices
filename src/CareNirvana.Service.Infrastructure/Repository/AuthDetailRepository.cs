@@ -26,12 +26,13 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 {
                     await connection.OpenAsync();
                     using (var command = new NpgsqlCommand(
-                        "INSERT INTO authdetailsave (data, createdon) VALUES (@data, @createdon)", connection))
+                        "INSERT INTO authdetailsave (data, createdon,authnumber) VALUES (@data, @createdon, @authNumber)", connection))
                     {
                         // Ensure the data is inserted as a JSONB array
                         command.Parameters.AddWithValue("@data", NpgsqlDbType.Jsonb | NpgsqlDbType.Array, authDetail.Data.ToArray());
 
                         command.Parameters.AddWithValue("@createdon", authDetail.CreatedOn);
+                        command.Parameters.AddWithValue("@authNumber", authDetail.AuthNumber);
 
                         await command.ExecuteNonQueryAsync();
                     }
