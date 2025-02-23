@@ -6,3 +6,4 @@
 *.cache
 bin
 obj
+/.vs/CareNirvanaServices/v17/.suo

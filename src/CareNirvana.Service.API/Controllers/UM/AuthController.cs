@@ -25,6 +25,13 @@ namespace CareNirvana.Service.API.Controllers
             return Ok(result);
         }
 
+        [HttpGet("template/{id}")]
+        public async Task<ActionResult<List<AuthTemplate>>> GetAuthTemplate(int id)
+        {
+            var result = await _getAuthTemplatesQuery.GetTemplate(id);
+            return Ok(result);
+        }
+
         [HttpPost("save")]
         public async Task<IActionResult> SaveAuthDetail([FromBody] AuthDetail authDetail)
         {

@@ -21,5 +21,10 @@ namespace CareNirvana.Service.Application.UseCases
         {
             return await _repository.GetAllAsync();
         }
+
+        public async Task<List<AuthTemplate>> GetTemplate(int id)
+        {
+            return await _repository.GetAuthTemplate(id);
+        }
     }
 }
