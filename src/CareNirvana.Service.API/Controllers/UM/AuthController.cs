@@ -52,6 +52,26 @@ namespace CareNirvana.Service.API.Controllers
             }
         }
 
+        [HttpPost("savetemplate")]
+        public async Task<IActionResult> SaveAuthTemplate([FromBody] AuthTemplate authTemplate)
+        {
+            try
+            {
+                if (authTemplate == null || authTemplate.JsonContent == null || !authTemplate.JsonContent.Any() || authTemplate.TemplateName == null)
+                {
+                    return BadRequest("Invalid data received");
+                }
+
+                await _getAuthTemplatesQuery.ExecuteAsync(authTemplate);
+                return Ok("Data saved successfully");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error saving auth detail: {ex.Message}");
+                return StatusCode(500, $"Internal Server Error: {ex.Message}");
+            }
+        }
+
 
 
     }

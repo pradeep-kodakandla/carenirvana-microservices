@@ -2,6 +2,7 @@
 using CareNirvana.Service.Domain.Model;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
+using NpgsqlTypes;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -73,6 +74,35 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 }
             }
             return templates;
+        }
+
+        public async Task SaveAsync(AuthTemplate authTemplate)
+        {
+            try
+            {
+                using (var connection = new NpgsqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    using (var command = new NpgsqlCommand(
+                        "INSERT INTO authtemplate (jsoncontent, createdby, createdon,templatename) VALUES (@JsonContent::jsonb, @createdby,@createdon, @templateName)", connection))
+                    {
+                        // Ensure the data is inserted as a JSONB array
+                        command.Parameters.AddWithValue("@JsonContent", authTemplate.JsonContent);
+                        command.Parameters.AddWithValue("@createdby", authTemplate.CreatedBy);
+                        command.Parameters.AddWithValue("@createdon", authTemplate.CreatedOn);
+                        command.Parameters.AddWithValue("@templateName", authTemplate.TemplateName);
+                        // Explicitly set the parameter type as jsonb
+                        command.Parameters["@JsonContent"].NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Jsonb;
+
+                        await command.ExecuteNonQueryAsync();
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Database Error: {ex.Message}");
+                throw;
+            }
         }
 
     }
