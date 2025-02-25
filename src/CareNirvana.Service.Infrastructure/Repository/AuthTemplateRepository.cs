@@ -80,7 +80,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
         {
             try
             {
-                if (authTemplate.Id == 0 || authTemplate.Id != null)
+                if (authTemplate.Id == 0)
                 {
                     using (var connection = new NpgsqlConnection(_connectionString))
                     {

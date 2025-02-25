@@ -34,6 +34,8 @@ namespace CareNirvana.Service.Application.UseCases
                 JsonContent = authTemplate.JsonContent,
                 CreatedOn = System.DateTime.UtcNow,
                 TemplateName = authTemplate.TemplateName,
+                Id = authTemplate.Id,
+                CreatedBy = authTemplate.CreatedBy,
             };
 
             await _repository.SaveAsync(authTemplate);
