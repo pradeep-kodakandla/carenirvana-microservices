@@ -8,7 +8,7 @@ namespace CareNirvana.Service.Domain.Model
 {
     public class AuthTemplate
     {
-        public int Id { get; set; }
+        public int? Id { get; set; }
         public string TemplateName { get; set; }
         public string JsonContent { get; set; }
         public DateTime CreatedOn { get; set; }

@@ -80,21 +80,45 @@ namespace CareNirvana.Service.Infrastructure.Repository
         {
             try
             {
-                using (var connection = new NpgsqlConnection(_connectionString))
+                if (authTemplate.Id == 0 || authTemplate.Id != null)
                 {
-                    await connection.OpenAsync();
-                    using (var command = new NpgsqlCommand(
-                        "INSERT INTO authtemplate (jsoncontent, createdby, createdon,templatename) VALUES (@JsonContent::jsonb, @createdby,@createdon, @templateName)", connection))
+                    using (var connection = new NpgsqlConnection(_connectionString))
                     {
-                        // Ensure the data is inserted as a JSONB array
-                        command.Parameters.AddWithValue("@JsonContent", authTemplate.JsonContent);
-                        command.Parameters.AddWithValue("@createdby", authTemplate.CreatedBy);
-                        command.Parameters.AddWithValue("@createdon", authTemplate.CreatedOn);
-                        command.Parameters.AddWithValue("@templateName", authTemplate.TemplateName);
-                        // Explicitly set the parameter type as jsonb
-                        command.Parameters["@JsonContent"].NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Jsonb;
+                        await connection.OpenAsync();
+                        using (var command = new NpgsqlCommand(
+                            "INSERT INTO authtemplate (jsoncontent, createdby, createdon,templatename) VALUES (@JsonContent::jsonb, @createdby,@createdon, @templateName)", connection))
+                        {
+                            // Ensure the data is inserted as a JSONB array
+                            command.Parameters.AddWithValue("@JsonContent", authTemplate.JsonContent);
+                            command.Parameters.AddWithValue("@createdby", authTemplate.CreatedBy);
+                            command.Parameters.AddWithValue("@createdon", authTemplate.CreatedOn);
+                            command.Parameters.AddWithValue("@templateName", authTemplate.TemplateName);
+                            // Explicitly set the parameter type as jsonb
+                            command.Parameters["@JsonContent"].NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Jsonb;
 
-                        await command.ExecuteNonQueryAsync();
+                            await command.ExecuteNonQueryAsync();
+                        }
+                    }
+                }
+                else
+                {
+                    using (var connection = new NpgsqlConnection(_connectionString))
+                    {
+                        await connection.OpenAsync();
+                        using (var command = new NpgsqlCommand(
+                            "UPDATE authtemplate SET jsoncontent = @JsonContent::jsonb, createdby = @createdby, createdon = @createdon, templatename = @templateName WHERE id = @id", connection))
+                        {
+                            command.Parameters.AddWithValue("@JsonContent", authTemplate.JsonContent);
+                            command.Parameters.AddWithValue("@createdby", authTemplate.CreatedBy);
+                            command.Parameters.AddWithValue("@createdon", authTemplate.CreatedOn);
+                            command.Parameters.AddWithValue("@templateName", authTemplate.TemplateName);
+                            command.Parameters.AddWithValue("@id", authTemplate.Id);
+
+                            // Explicitly set the parameter type for JSONB
+                            command.Parameters["@JsonContent"].NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Jsonb;
+
+                            await command.ExecuteNonQueryAsync();
+                        }
                     }
                 }
             }
