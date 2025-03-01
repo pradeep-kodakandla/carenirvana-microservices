@@ -106,10 +106,10 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     {
                         await connection.OpenAsync();
                         using (var command = new NpgsqlCommand(
-                            "UPDATE authtemplate SET jsoncontent = @JsonContent::jsonb, createdby = @createdby, createdon = @createdon, templatename = @templateName WHERE id = @id", connection))
+                            "UPDATE authtemplate SET jsoncontent = @JsonContent::jsonb, updatedby = @updatedby, updatedon = @updatedon, templatename = @templateName WHERE id = @id", connection))
                         {
                             command.Parameters.AddWithValue("@JsonContent", authTemplate.JsonContent);
-                            command.Parameters.AddWithValue("@updateby", authTemplate.CreatedBy);
+                            command.Parameters.AddWithValue("@updatedby", authTemplate.CreatedBy);
                             command.Parameters.AddWithValue("@updatedon", authTemplate.CreatedOn);
                             command.Parameters.AddWithValue("@templateName", authTemplate.TemplateName);
                             command.Parameters.AddWithValue("@id", authTemplate.Id);
