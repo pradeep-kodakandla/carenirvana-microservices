@@ -68,21 +68,20 @@ var app = builder.Build();
 app.UseCors("AllowAngularApp");
 
 // Explicit OPTIONS handling
-app.Use(async (context, next) =>
+app.Use((context, next) =>
 {
     if (context.Request.Method == "OPTIONS")
     {
-        var origin = context.Request.Headers["Origin"].ToString();
-        // Optionally, validate that 'origin' is in your allowed origins list
-        context.Response.Headers.Add("Access-Control-Allow-Origin", origin);
+        Console.WriteLine("Handling OPTIONS request for: " + context.Request.Path);
+        context.Response.Headers.Add("Access-Control-Allow-Origin", "https://proud-field-09c04620f.5.azurestaticapps.net");
         context.Response.Headers.Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
         context.Response.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Authorization");
-        context.Response.Headers.Add("Access-Control-Allow-Credentials", "true");
         context.Response.Headers.Add("Access-Control-Max-Age", "86400");
         context.Response.StatusCode = 200;
-        return;
+        Console.WriteLine("OPTIONS response sent with status 200");
+        return Task.CompletedTask;
     }
-    await next();
+    return next();
 });
 
 
