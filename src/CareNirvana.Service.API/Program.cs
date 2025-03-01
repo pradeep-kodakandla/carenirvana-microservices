@@ -72,15 +72,19 @@ app.Use(async (context, next) =>
 {
     if (context.Request.Method == "OPTIONS")
     {
-        context.Response.Headers.Add("Access-Control-Allow-Origin", "https://proud-field-09c04620f.5.azurestaticapps.net");
+        var origin = context.Request.Headers["Origin"].ToString();
+        // Optionally, validate that 'origin' is in your allowed origins list
+        context.Response.Headers.Add("Access-Control-Allow-Origin", origin);
         context.Response.Headers.Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
         context.Response.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Authorization");
+        context.Response.Headers.Add("Access-Control-Allow-Credentials", "true");
         context.Response.Headers.Add("Access-Control-Max-Age", "86400");
         context.Response.StatusCode = 200;
-        return; // Implicitly returns Task via async void-like behavior
+        return;
     }
     await next();
 });
+
 
 app.UseHttpsRedirection();
 app.UseAuthentication();
