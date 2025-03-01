@@ -1,12 +1,12 @@
-﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using System.Text;
-using Swashbuckle.AspNetCore.Filters;
-using CareNirvana.Service.Application.Services;
+﻿using CareNirvana.DataAccess;
 using CareNirvana.Service.Application.Interfaces;
-using CareNirvana.Service.Infrastructure.Repository;
-using CareNirvana.DataAccess;
+using CareNirvana.Service.Application.Services;
 using CareNirvana.Service.Application.UseCases;
+using CareNirvana.Service.Infrastructure.Repository;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using Swashbuckle.AspNetCore.Filters;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -67,14 +67,13 @@ var app = builder.Build();
 
 app.UseCors("AllowAngularApp");
 
-// Explicit OPTIONS handling
 app.Use((context, next) =>
 {
+    Console.WriteLine($"Request received: {context.Request.Method} {context.Request.Path}");
     if (context.Request.Method == "OPTIONS")
     {
-        Console.WriteLine("Handling OPTIONS request for: " + context.Request.Path);
         context.Response.Headers.Add("Access-Control-Allow-Origin", "https://proud-field-09c04620f.5.azurestaticapps.net");
-        context.Response.Headers.Add("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        context.Response.Headers.Add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
         context.Response.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Authorization");
         context.Response.Headers.Add("Access-Control-Max-Age", "86400");
         context.Response.StatusCode = 200;
@@ -83,7 +82,6 @@ app.Use((context, next) =>
     }
     return next();
 });
-
 
 app.UseHttpsRedirection();
 app.UseAuthentication();
