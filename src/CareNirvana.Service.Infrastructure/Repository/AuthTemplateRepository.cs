@@ -109,8 +109,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                             "UPDATE authtemplate SET jsoncontent = @JsonContent::jsonb, createdby = @createdby, createdon = @createdon, templatename = @templateName WHERE id = @id", connection))
                         {
                             command.Parameters.AddWithValue("@JsonContent", authTemplate.JsonContent);
-                            command.Parameters.AddWithValue("@createdby", authTemplate.CreatedBy);
-                            command.Parameters.AddWithValue("@createdon", authTemplate.CreatedOn);
+                            command.Parameters.AddWithValue("@updateby", authTemplate.CreatedBy);
+                            command.Parameters.AddWithValue("@updatedon", authTemplate.CreatedOn);
                             command.Parameters.AddWithValue("@templateName", authTemplate.TemplateName);
                             command.Parameters.AddWithValue("@id", authTemplate.Id);
 
