@@ -41,8 +41,9 @@ namespace CareNirvana.Service.Infrastructure.Repository
         // 🔹 Get user from PostgreSQL
         public SecurityUser? GetUser(string username, string password)
         {
-            var secretKey = "your-very-secret-key-1234"; // 16 characters for AES-128
-            var iv = "encryptionIntVec"; // 16 characters IV
+            var secretKey = "0123456789ABCDEF"; // Exactly 16 characters = 16 bytes in UTF8
+            var iv = "encryptionIntVec";       // Also ensure the IV is exactly 16 characters
+
             var decryptedPassword = DecryptPassword(password, secretKey, iv);
 
             var sql = "SELECT userid, userdetailid, username, password FROM securityuser WHERE username=@username AND password=@password AND activeflag=true";
@@ -69,9 +70,15 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
         private string DecryptPassword(string encryptedText, string key, string iv)
         {
-            // Convert the key and IV strings to byte arrays.
+            // Convert the key and IV strings to byte arrays using UTF8 encoding.
             byte[] keyBytes = Encoding.UTF8.GetBytes(key);
             byte[] ivBytes = Encoding.UTF8.GetBytes(iv);
+
+            // Ensure key length is valid: 16, 24, or 32 bytes.
+            if (!(keyBytes.Length == 16 || keyBytes.Length == 24 || keyBytes.Length == 32))
+            {
+                throw new ArgumentException("Invalid key size. Key must be 16, 24, or 32 bytes for AES.");
+            }
 
             // Convert the encrypted text (Base64 encoded) to a byte array.
             byte[] cipherTextBytes = Convert.FromBase64String(encryptedText);
@@ -89,12 +96,13 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 using (CryptoStream csDecrypt = new CryptoStream(msDecrypt, decryptor, CryptoStreamMode.Read))
                 using (StreamReader srDecrypt = new StreamReader(csDecrypt))
                 {
-                    // Read the decrypted bytes and convert them to a string.
-                    string decrypted = srDecrypt.ReadToEnd();
-                    return decrypted;
+                    // Read the decrypted bytes and return the original string.
+                    return srDecrypt.ReadToEnd();
                 }
             }
         }
 
     }
+
 }
+
