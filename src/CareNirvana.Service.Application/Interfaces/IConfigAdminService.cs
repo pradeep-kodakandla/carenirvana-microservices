@@ -12,6 +12,6 @@ namespace CareNirvana.Service.Application.Interfaces
         Task<JsonElement?> GetSectionData(string module, string section);
         Task<JsonElement> AddEntry(string module, string section, JsonElement newEntry);
         Task<JsonElement?> UpdateEntry(string module, string section, string id, JsonElement updatedEntry);
-        Task<bool> DeleteEntry(string module, string section, string id);
+        Task<bool> DeleteEntry(string module, string section, string id, JsonElement updatedEntry);
     }
 }

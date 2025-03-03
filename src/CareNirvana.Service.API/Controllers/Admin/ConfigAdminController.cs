@@ -41,10 +41,10 @@ namespace CareNirvana.Service.API.Controllers.Admin
             return Ok(result);
         }
 
-        [HttpDelete("{module}/{section}/{id}")]
-        public async Task<IActionResult> DeleteEntry(string module, string section, string id)
+        [HttpPatch("{module}/{section}/{id}")]
+        public async Task<IActionResult> DeleteEntry(string module, string section, string id, [FromBody] JsonElement deleteInfo)
         {
-            var result = await _configAdminService.DeleteEntry(module, section, id);
+            var result = await _configAdminService.DeleteEntry(module, section, id, deleteInfo);
             if (!result)
                 return NotFound(new { message = "Record not found" });
             return Ok(new { message = "Record deleted successfully." });

@@ -36,9 +36,9 @@ namespace CareNirvana.Service.Application.Services
         }
 
 
-        public async Task<bool> DeleteEntry(string module, string section, string id)
+        public async Task<bool> DeleteEntry(string module, string section, string id, JsonElement deleteInfo)
         {
-            return await _repository.DeleteEntry(module, section, id);
+            return await _repository.DeleteEntry(module, section, id, deleteInfo);
         }
     }
 }

@@ -1,4 +1,5 @@
 ﻿using CareNirvana.Service.Application.Interfaces;
+using Microsoft.EntityFrameworkCore.Update;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using System;
@@ -49,11 +50,22 @@ namespace CareNirvana.Service.Infrastructure.Repository
             await using var conn = GetConnection();
             await conn.OpenAsync();
 
-            var query = "UPDATE cfgadmindata SET jsoncontent = jsonb_set(jsoncontent, @path, @value::jsonb, true) WHERE UPPER(module) = @module RETURNING jsoncontent";
+            var query = @"
+        UPDATE cfgadmindata 
+        SET jsoncontent = jsonb_set(
+            jsoncontent,
+            @path::text[],
+            COALESCE(jsoncontent->@section, '[]'::jsonb) || @value::jsonb,
+            true
+        )
+        WHERE UPPER(module) = @module 
+        RETURNING jsoncontent";
+
             await using var cmd = new NpgsqlCommand(query, conn);
-            cmd.Parameters.AddWithValue("path", "{" + section + "}");
-            cmd.Parameters.AddWithValue("value", newEntry.ToString());
-            cmd.Parameters.AddWithValue("module", module);
+            cmd.Parameters.AddWithValue("path", new[] { section }); // e.g., {"qualityindicator"}
+            cmd.Parameters.AddWithValue("section", section); // e.g., "qualityindicator"
+            cmd.Parameters.AddWithValue("value", newEntry.ToString()); // The new entry
+            cmd.Parameters.AddWithValue("module", module); // e.g., "UM"
 
             var result = await cmd.ExecuteScalarAsync();
             return JsonDocument.Parse(result.ToString()).RootElement;
@@ -64,27 +76,67 @@ namespace CareNirvana.Service.Infrastructure.Repository
             module = module.ToUpper();
             await using var conn = GetConnection();
             await conn.OpenAsync();
+            Console.WriteLine($"updatedEntry: {updatedEntry.ToString()}");
+            var query = @"
+        UPDATE cfgadmindata 
+        SET jsoncontent = jsonb_set(
+            jsoncontent,
+            @section_path::text[],
+            (
+                SELECT jsonb_agg(
+                    CASE WHEN elem->>'id' = @id THEN @value::jsonb
+                         ELSE elem
+                    END
+                )
+                FROM jsonb_array_elements(jsoncontent->@section) AS elem
+            ),
+            false
+        )
+        WHERE UPPER(module) = @module 
+        RETURNING jsoncontent->@section";
 
-            var query = "UPDATE cfgadmindata SET jsoncontent = jsonb_set(jsoncontent, @path, @value::jsonb, false) WHERE UPPER(module) = @module RETURNING jsoncontent";
             await using var cmd = new NpgsqlCommand(query, conn);
-            cmd.Parameters.AddWithValue("path", "{" + section + "}");
-            cmd.Parameters.AddWithValue("value", updatedEntry.ToString());
-            cmd.Parameters.AddWithValue("module", module);
+            cmd.Parameters.AddWithValue("section_path", new[] { section }); // e.g., {"qualityindicator"}
+            cmd.Parameters.AddWithValue("section", section); // e.g., "qualityindicator"
+            cmd.Parameters.AddWithValue("id", id); // e.g., "2"
+            cmd.Parameters.AddWithValue("value", updatedEntry.ToString()); // The updated JSON object as a string
+            cmd.Parameters.AddWithValue("module", module); // e.g., "UM"
 
             var result = await cmd.ExecuteScalarAsync();
             return result == null ? null : JsonDocument.Parse(result.ToString()).RootElement;
         }
 
-        public async Task<bool> DeleteEntry(string module, string section, string id)
+
+        public async Task<bool> DeleteEntry(string module, string section, string id, JsonElement deleteInfo)
         {
             module = module.ToUpper();
             await using var conn = GetConnection();
             await conn.OpenAsync();
 
-            var query = "DELETE FROM cfgadmindata WHERE id = @id AND UPPER(module) = @module";
+            var query = @"
+        UPDATE cfgadmindata 
+        SET jsoncontent = jsonb_set(
+            jsoncontent,
+            @path::text[],
+            (
+                SELECT jsonb_agg(
+                    CASE WHEN elem->>'id' = @id THEN elem || @value::jsonb
+                         ELSE elem
+                    END
+                )
+                FROM jsonb_array_elements(jsoncontent->@section) AS elem
+            ),
+            false
+        )
+        WHERE UPPER(module) = @module 
+        RETURNING jsoncontent";
+
             await using var cmd = new NpgsqlCommand(query, conn);
-            cmd.Parameters.AddWithValue("id", id);
-            cmd.Parameters.AddWithValue("module", module);
+            cmd.Parameters.AddWithValue("path", new[] { section }); // e.g., {"qualityindicator"}
+            cmd.Parameters.AddWithValue("section", section); // e.g., "qualityindicator"
+            cmd.Parameters.AddWithValue("id", id); // e.g., "2"
+            cmd.Parameters.AddWithValue("value", deleteInfo.ToString()); // e.g., {"deletedBy": "user", "deletedOn": "timestamp"}
+            cmd.Parameters.AddWithValue("module", module); // e.g., "UM"
 
             var rowsAffected = await cmd.ExecuteNonQueryAsync();
             return rowsAffected > 0;
