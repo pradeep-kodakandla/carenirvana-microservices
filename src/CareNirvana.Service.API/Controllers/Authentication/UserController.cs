@@ -1,80 +1,61 @@
 ﻿using CareNirvana.Service.Application.Interfaces;
 using CareNirvana.Service.Domain.Model;
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 
-namespace CareNirvana.Service.Controllers.User
+[Route("api/[controller]")]
+[ApiController]
+public class UserController : ControllerBase
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class UserController : ControllerBase
+    private readonly IUserService _userService;
+    private readonly IConfiguration _configuration;
+
+    public UserController(IUserService userService, IConfiguration configuration)
     {
-        private readonly IUserService _userService;
-        private readonly IConfiguration _configuration;
+        _userService = userService;
+        _configuration = configuration;
+    }
 
-        public UserController(IUserService userService, IConfiguration configuration)
+    [HttpPost("authenticate")]
+    public IActionResult Authenticate([FromBody] Login loginParam)
+    {
+        if (loginParam == null || string.IsNullOrEmpty(loginParam.UserName) || string.IsNullOrEmpty(loginParam.Password))
         {
-            _userService = userService;
-            _configuration = configuration;
+            return BadRequest(new { error = "Invalid request payload" });
         }
 
-        [HttpPost("authenticate")]
-        public IActionResult Authenticate([FromBody] Login loginParam)
+        var user = _userService.Authenticate(loginParam.UserName, loginParam.Password);
+
+        if (user == null)
         {
-            if (loginParam == null || string.IsNullOrEmpty(loginParam.UserName) || string.IsNullOrEmpty(loginParam.Password))
-            {
-                return BadRequest(new { error = "Invalid request payload" });
-            }
-
-            var user = _userService.Authenticate(loginParam.UserName, loginParam.Password);
-
-            if (user == null)
-            {
-                return Unauthorized(new { error = "Username or password is incorrect" });
-            }
-
-            // 🔹 Generate JWT Token
-            var tokenHandler = new JwtSecurityTokenHandler();
-            var key = Encoding.ASCII.GetBytes(_configuration["Jwt:Secret"]);
-            var tokenDescriptor = new SecurityTokenDescriptor
-            {
-                Subject = new ClaimsIdentity(new[]
-                {
-            new Claim(ClaimTypes.Name, user.UserName),
-            new Claim(ClaimTypes.Role, "User")
-        }),
-                Expires = DateTime.UtcNow.AddHours(1),
-                SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
-            };
-            var token = tokenHandler.CreateToken(tokenDescriptor);
-            var tokenString = tokenHandler.WriteToken(token);
-
-            // ✅ Ensure JSON response and Content-Type
-            var response = new
-            {
-                Token = tokenString,
-                UserName = user.UserName,
-                Message = "Login successful!"
-            };
-
-            Response.Headers["Content-Type"] = "application/json";
-            return new JsonResult(response) { ContentType = "application/json" };
+            return Unauthorized(new { error = "Username or password is incorrect" });
         }
 
-        
-        // ✅ Handle CORS Preflight for Angular
-        [HttpOptions("authenticate")]
-        public IActionResult Preflight()
+        var tokenHandler = new JwtSecurityTokenHandler();
+        var key = Encoding.ASCII.GetBytes(_configuration["Jwt:Secret"]);
+        var tokenDescriptor = new SecurityTokenDescriptor
         {
-            var allowedOrigins = new[] { "http://localhost:4200", "https://proud-field-09c04620f.5.azurestaticapps.net", "https://prod.angular-app.com" };
-            Response.Headers.Add("Access-Control-Allow-Origin", allowedOrigins);
-            Response.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Authorization");
-            Response.Headers.Add("Access-Control-Allow-Methods", "POST, OPTIONS");
-            return Ok();
-        }
+            Subject = new ClaimsIdentity(new[]
+            {
+                new Claim(ClaimTypes.Name, user.UserName),
+                new Claim(ClaimTypes.Role, "User")
+            }),
+            Expires = DateTime.UtcNow.AddHours(1),
+            SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+        };
+        var token = tokenHandler.CreateToken(tokenDescriptor);
+        var tokenString = tokenHandler.WriteToken(token);
+
+        var response = new
+        {
+            Token = tokenString,
+            UserName = user.UserName,
+            Message = "Login successful!"
+        };
+
+        return Ok(response); // Simplified return, CORS middleware will handle headers
     }
 }

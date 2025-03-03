@@ -67,6 +67,8 @@ var app = builder.Build();
 
 app.UseCors("AllowAngularApp");
 
+app.Logger.LogInformation("CORS policy 'AllowAngularApp' applied.");
+
 app.Use((context, next) =>
 {
     Console.WriteLine($"Request received: {context.Request.Method} {context.Request.Path}");
