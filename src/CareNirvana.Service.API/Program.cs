@@ -53,7 +53,7 @@ builder.Services.AddTransient<SaveAuthDetailCommand>();
 builder.Services.AddScoped<IConfigAdminService, ConfigAdminService>();
 builder.Services.AddScoped<IConfigAdminRepository, ConfigAdminRepository>();
 
-var allowedOrigins = new[] { "http://localhost:4200", "https://proud-field-09c04620f.5.azurestaticapps.net", "https://prod.angular-app.com" };
+var allowedOrigins = new[] { "http://localhost:4200", "https://proud-field-09c04620f.5.azurestaticapps.net", "https://proud-coast-0237bd90f.6.azurestaticapps.net/" };
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAngularApp",
@@ -74,7 +74,7 @@ app.Use((context, next) =>
     Console.WriteLine($"Request received: {context.Request.Method} {context.Request.Path}");
     if (context.Request.Method == "OPTIONS")
     {
-        context.Response.Headers.Add("Access-Control-Allow-Origin", "https://proud-field-09c04620f.5.azurestaticapps.net");
+        context.Response.Headers.Add("Access-Control-Allow-Origin", "https://proud-coast-0237bd90f.6.azurestaticapps.net/");
         context.Response.Headers.Add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
         context.Response.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Authorization");
         context.Response.Headers.Add("Access-Control-Max-Age", "86400");
