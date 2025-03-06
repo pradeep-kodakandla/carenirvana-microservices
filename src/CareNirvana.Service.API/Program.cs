@@ -53,7 +53,12 @@ builder.Services.AddTransient<SaveAuthDetailCommand>();
 builder.Services.AddScoped<IConfigAdminService, ConfigAdminService>();
 builder.Services.AddScoped<IConfigAdminRepository, ConfigAdminRepository>();
 
-var allowedOrigins = new[] { "http://localhost:4200", "https://proud-field-09c04620f.5.azurestaticapps.net", "https://proud-coast-0237bd90f.6.azurestaticapps.net/" };
+var allowedOrigins = new[] {
+    "http://localhost:4200",
+    "https://proud-field-09c04620f.5.azurestaticapps.net",
+    "https://proud-coast-0237bd90f.6.azurestaticapps.net"
+};
+
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAngularApp",
@@ -93,6 +98,21 @@ app.Use(async (context, next) =>
     context.Response.ContentType = "application/json";
     await next();
 });
+
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        context.Response.StatusCode = 500;
+        context.Response.ContentType = "application/json";
+        var error = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerFeature>();
+        if (error != null)
+        {
+            await context.Response.WriteAsync($"{{ \"error\": \"{error.Error.Message}\" }}");
+        }
+    });
+});
+
 
 if (app.Environment.IsDevelopment())
 {
