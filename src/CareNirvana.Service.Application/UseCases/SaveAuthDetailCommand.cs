@@ -24,9 +24,20 @@ namespace CareNirvana.Service.Application.UseCases
                 Data = jsonData.Data,
                 CreatedOn = System.DateTime.UtcNow,
                 AuthNumber = jsonData.AuthNumber,
+                AuthTypeId = jsonData.AuthTypeId,
+                MemberId = jsonData.MemberId,
+                AuthDueDate = jsonData.AuthDueDate,
+                NextReviewDate = jsonData.NextReviewDate,
+                UpdatedOn = System.DateTime.UtcNow,
+                DeletedOn = jsonData.DeletedOn,
+                SaveType = jsonData.SaveType,
+                TreatmentType = jsonData.TreatmentType,
+                CreatedBy = jsonData.CreatedBy,
+                UpdatedBy = jsonData.UpdatedBy,
+                DeletedBy = jsonData.DeletedBy
             };
 
-            await _repository.SaveAsync(authDetail);
+            await _repository.SaveAsync(jsonData);
         }
     }
 }
