@@ -127,7 +127,21 @@ namespace CareNirvana.Service.Infrastructure.Repository
                      "WHERE authnumber = @authNumber", connection))
                     {
                         // Ensure the data is inserted as a JSONB array
-                        command.Parameters.AddWithValue("@data", NpgsqlDbType.Jsonb | NpgsqlDbType.Array, authDetail.Data.ToArray());
+                        // Convert objects inside List<object> to proper JSON-compatible objects
+                        var processedData = authDetail.Data.Select(item =>
+                        {
+                            if (item is JsonElement element) // Check if it's a JsonElement
+                            {
+                                return JsonConvert.DeserializeObject<object>(element.GetRawText()); // Convert to object
+                            }
+                            return item; // Keep as-is if it's already a valid object
+                        }).ToList();
+
+                        // Serialize the cleaned data properly
+                        var jsonData = JsonConvert.SerializeObject(processedData, Formatting.None);
+
+                        // Insert properly formatted JSONB into PostgreSQL
+                        command.Parameters.AddWithValue("@data", NpgsqlDbType.Jsonb, jsonData);
 
                         command.Parameters.AddWithValue("@updatedon", authDetail.UpdatedOn);
                         command.Parameters.AddWithValue("@updatedby", authDetail.UpdatedBy);
