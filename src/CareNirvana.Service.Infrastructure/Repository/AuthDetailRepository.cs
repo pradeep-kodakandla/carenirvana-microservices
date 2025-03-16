@@ -1,9 +1,12 @@
 ﻿using CareNirvana.Service.Application.Interfaces;
 using CareNirvana.Service.Domain.Model;
+using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Npgsql;
 using NpgsqlTypes;
+using System.ComponentModel;
+using System.Text.Json;  // Required for JsonElement
 
 
 namespace CareNirvana.Service.Infrastructure.Repository
@@ -68,8 +71,22 @@ namespace CareNirvana.Service.Infrastructure.Repository
                         "INSERT INTO authdetail (data, createdon, createdby, authnumber, authtypeid, memberid, authduedate, nextreviewdate, treatementtype ) " +
                         "VALUES (@data, @createdon, @createdby, @authNumber, @authTypeId, @memberId, @authDueDate, @nextReviewDate, @treatmentType )", connection))
                     {
-                        // Ensure the data is inserted as a JSONB array
-                        command.Parameters.AddWithValue("@data", NpgsqlDbType.Jsonb | NpgsqlDbType.Array, authDetail.Data.ToArray());
+                        // Convert objects inside List<object> to proper JSON-compatible objects
+                        var processedData = authDetail.Data.Select(item =>
+                        {
+                            if (item is JsonElement element) // Check if it's a JsonElement
+                            {
+                                return JsonConvert.DeserializeObject<object>(element.GetRawText()); // Convert to object
+                            }
+                            return item; // Keep as-is if it's already a valid object
+                        }).ToList();
+
+                        // Serialize the cleaned data properly
+                        var jsonData = JsonConvert.SerializeObject(processedData, Formatting.None);
+
+                        // Insert properly formatted JSONB into PostgreSQL
+                        command.Parameters.AddWithValue("@data", NpgsqlDbType.Jsonb, jsonData);
+
 
                         command.Parameters.AddWithValue("@createdon", authDetail.CreatedOn);
                         command.Parameters.AddWithValue("@createdby", authDetail.CreatedBy);
