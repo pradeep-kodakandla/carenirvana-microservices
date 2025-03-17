@@ -73,7 +73,47 @@ namespace CareNirvana.Service.API.Controllers
         }
 
 
+        // New API: Get all AuthDetails by Member ID
+        [HttpGet("member/{memberId}")]
+        public async Task<ActionResult<List<AuthDetail>>> GetAllByMemberId(int memberId)
+        {
+            try
+            {
+                var result = await _saveAuthDetailCommand.GetAllAsync(memberId);
+                if (result == null || result.Count == 0)
+                {
+                    return Ok(new List<AuthDetail>());  // Return an empty list instead of 404
+                }
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error fetching auth details: {ex.Message}");
+                return StatusCode(500, $"Internal Server Error: {ex.Message}");
+            }
+        }
 
+        // New API: Get AuthDetails by Auth Number
+        [HttpGet("auth/{authNumber}")]
+        public async Task<ActionResult<List<AuthDetail>>> GetAuthData(string authNumber)
+        {
+            try
+            {
+                var result = await _saveAuthDetailCommand.GetAuthData(authNumber);
+                if (result == null || result.Count == 0)
+                {
+                    return Ok(new List<AuthDetail>());  // Return an empty list instead of 404
+                }
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error fetching auth details: {ex.Message}");
+                return StatusCode(500, $"Internal Server Error: {ex.Message}");
+            }
+        }
     }
 }
+
 

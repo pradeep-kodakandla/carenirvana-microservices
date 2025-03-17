@@ -10,5 +10,7 @@ namespace CareNirvana.Service.Application.Interfaces
     public interface IAuthDetailRepository
     {
         Task SaveAsync(AuthDetail authDetail);
+        Task<List<AuthDetail>> GetAllAsync(int memberId);
+        Task<List<AuthDetail>> GetAuthData(string authNumber);
     }
 }

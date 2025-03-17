@@ -1,10 +1,5 @@
 ﻿using CareNirvana.Service.Application.Interfaces;
 using CareNirvana.Service.Domain.Model;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace CareNirvana.Service.Application.UseCases
 {
@@ -38,6 +33,16 @@ namespace CareNirvana.Service.Application.UseCases
             };
 
             await _repository.SaveAsync(jsonData);
+        }
+
+        public async Task<List<AuthDetail>> GetAllAsync(int memberId)
+        {
+            return await _repository.GetAllAsync(memberId);
+        }
+
+        public async Task<List<AuthDetail>> GetAuthData(string authNumber)
+        {
+            return await _repository.GetAuthData(authNumber);
         }
     }
 }

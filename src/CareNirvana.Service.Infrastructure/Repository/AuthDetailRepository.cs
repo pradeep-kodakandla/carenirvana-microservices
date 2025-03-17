@@ -20,7 +20,6 @@ namespace CareNirvana.Service.Infrastructure.Repository
             _connectionString = configuration.GetConnectionString("DefaultConnection");
         }
 
-
         public async Task SaveAsync(AuthDetail authDetail)
         {
             try
@@ -37,21 +36,6 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 {
                     await DeleteAuthDetail(authDetail);
                 }
-                //using (var connection = new NpgsqlConnection(_connectionString))
-                //{
-                //    await connection.OpenAsync();
-                //    using (var command = new NpgsqlCommand(
-                //        "INSERT INTO authdetail (data, createdon, authnumber) VALUES (@data, @createdon, @authNumber)", connection))
-                //    {
-                //        // Ensure the data is inserted as a JSONB array
-                //        command.Parameters.AddWithValue("@data", NpgsqlDbType.Jsonb | NpgsqlDbType.Array, authDetail.Data.ToArray());
-
-                //        command.Parameters.AddWithValue("@createdon", authDetail.CreatedOn);
-                //        command.Parameters.AddWithValue("@authNumber", authDetail.AuthNumber);
-
-                //        await command.ExecuteNonQueryAsync();
-                //    }
-                //}
             }
             catch (Exception ex)
             {
@@ -78,16 +62,12 @@ namespace CareNirvana.Service.Infrastructure.Repository
                             {
                                 return JsonConvert.DeserializeObject<object>(element.GetRawText()); // Convert to object
                             }
-                            return item; // Keep as-is if it's already a valid object
+                            return item;
                         }).ToList();
 
-                        // Serialize the cleaned data properly
                         var jsonData = JsonConvert.SerializeObject(processedData, Formatting.None);
 
-                        // Insert properly formatted JSONB into PostgreSQL
                         command.Parameters.AddWithValue("@data", NpgsqlDbType.Jsonb, jsonData);
-
-
                         command.Parameters.AddWithValue("@createdon", authDetail.CreatedOn);
                         command.Parameters.AddWithValue("@createdby", authDetail.CreatedBy);
                         command.Parameters.AddWithValue("@authNumber", authDetail.AuthNumber);
@@ -195,6 +175,106 @@ namespace CareNirvana.Service.Infrastructure.Repository
             }
         }
 
+        public async Task<List<AuthDetail>> GetAllAsync(int memberId)
+        {
+            var authDetails = new List<AuthDetail>();
 
+            try
+            {
+                using (var connection = new NpgsqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    using (var command = new NpgsqlCommand(
+                        "SELECT authdetailid, authnumber, authtypeid, memberid, authduedate, nextreviewdate, treatementtype, data, createdon, createdby, updatedon, updatedby, deletedon, deletedby " +
+                        "FROM authdetail WHERE memberid = @memberId AND deletedon IS NULL", connection))
+                    {
+                        command.Parameters.AddWithValue("@memberId", memberId);
+
+                        using (var reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                authDetails.Add(new AuthDetail
+                                {
+                                    Id = reader.GetInt32(0),
+                                    AuthNumber = reader.GetString(1),
+                                    AuthTypeId = reader.GetInt32(2),
+                                    MemberId = reader.GetInt32(3),
+                                    AuthDueDate = reader.IsDBNull(4) ? null : reader.GetDateTime(4),
+                                    NextReviewDate = reader.IsDBNull(5) ? null : reader.GetDateTime(5),
+                                    TreatmentType = reader.IsDBNull(6) ? null : reader.GetString(6),
+                                    //Data = reader.IsDBNull(7) ? null : JsonConvert.DeserializeObject<List<object>>(reader.GetString(7)),
+                                    CreatedOn = reader.GetDateTime(8),
+                                    CreatedBy = reader.IsDBNull(9) ? null : reader.GetInt32(9),
+                                    UpdatedOn = reader.IsDBNull(10) ? null : reader.GetDateTime(10),
+                                    UpdatedBy = reader.IsDBNull(11) ? null : reader.GetInt32(11),
+                                    DeletedOn = reader.IsDBNull(12) ? null : reader.GetDateTime(12),
+                                    DeletedBy = reader.IsDBNull(13) ? null : reader.GetInt32(13),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Database Error: {ex.Message}");
+                throw;
+            }
+
+            return authDetails;
+        }
+
+        public async Task<List<AuthDetail>> GetAuthData(string authNumber)
+        {
+            var authDetails = new List<AuthDetail>();
+
+            try
+            {
+                using (var connection = new NpgsqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    using (var command = new NpgsqlCommand(
+                        "SELECT authdetailid, authnumber, authtypeid, memberid, authduedate, nextreviewdate, treatementtype, data, createdon, createdby, updatedon, updatedby, deletedon, deletedby " +
+                        "FROM authdetail WHERE authnumber = @authNumber AND deletedon IS NULL", connection))
+                    {
+                        command.Parameters.AddWithValue("@authNumber", authNumber);
+
+                        using (var reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                authDetails.Add(new AuthDetail
+                                {
+                                    Id = reader.GetInt32(0),
+                                    AuthNumber = reader.GetString(1),
+                                    AuthTypeId = reader.GetInt32(2),
+                                    MemberId = reader.GetInt32(3),
+                                    AuthDueDate = reader.IsDBNull(4) ? null : reader.GetDateTime(4),
+                                    NextReviewDate = reader.IsDBNull(5) ? null : reader.GetDateTime(5),
+                                    TreatmentType = reader.IsDBNull(6) ? null : reader.GetString(6),
+                                    responseData = reader.IsDBNull(7) ? null : reader.GetString(7),
+                                    CreatedOn = reader.GetDateTime(8),
+                                    CreatedBy = reader.IsDBNull(9) ? null : reader.GetInt32(9),
+                                    UpdatedOn = reader.IsDBNull(10) ? null : reader.GetDateTime(10),
+                                    UpdatedBy = reader.IsDBNull(11) ? null : reader.GetInt32(11),
+                                    DeletedOn = reader.IsDBNull(12) ? null : reader.GetDateTime(12),
+                                    DeletedBy = reader.IsDBNull(13) ? null : reader.GetInt32(13),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Database Error: {ex.Message}");
+                throw;
+            }
+
+            return authDetails;
+        }
     }
+
 }
+
