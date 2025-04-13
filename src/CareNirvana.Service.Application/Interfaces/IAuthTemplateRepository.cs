@@ -9,7 +9,7 @@ namespace CareNirvana.Service.Application.Interfaces
 {
     public interface IAuthTemplateRepository
     {
-        Task<List<AuthTemplate>> GetAllAsync();
+        Task<List<AuthTemplate>> GetAllAsync(int authClassId);
         Task<List<AuthTemplate>> GetAuthTemplate(int id);
         Task SaveAsync(AuthTemplate authTemplate);
     }

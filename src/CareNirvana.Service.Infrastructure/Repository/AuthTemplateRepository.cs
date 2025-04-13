@@ -21,29 +21,47 @@ namespace CareNirvana.Service.Infrastructure.Repository
         }
 
 
-        public async Task<List<AuthTemplate>> GetAllAsync()
+        public async Task<List<AuthTemplate>> GetAllAsync(int classId)
         {
             var templates = new List<AuthTemplate>();
+
             using (var connection = new NpgsqlConnection(_connectionString))
             {
                 await connection.OpenAsync();
-                using (var command = new NpgsqlCommand("SELECT id, templatename,  createdon, createdby FROM authtemplate", connection))
-                using (var reader = await command.ExecuteReaderAsync())
+
+                var query = "SELECT id, templatename, createdon, createdby, authclassid FROM authtemplate";
+                if (classId > 0)
                 {
-                    while (await reader.ReadAsync())
+                    query += " WHERE authclassid = @classid";
+                }
+
+                using (var command = new NpgsqlCommand(query, connection))
+                {
+                    if (classId > 0)
                     {
-                        templates.Add(new AuthTemplate
+                        command.Parameters.AddWithValue("@classid", classId);
+                    }
+
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        while (await reader.ReadAsync())
                         {
-                            Id = reader.GetInt32(0),
-                            TemplateName = reader.GetString(1),
-                            CreatedOn = reader.GetDateTime(2),
-                            CreatedBy = reader.GetInt32(3)
-                        });
+                            templates.Add(new AuthTemplate
+                            {
+                                Id = reader.GetInt32(0),
+                                TemplateName = reader.GetString(1),
+                                CreatedOn = reader.GetDateTime(2),
+                                CreatedBy = reader.GetInt32(3),
+                                authclassid = reader.IsDBNull(4) ? null : reader.GetInt32(4)
+                            });
+                        }
                     }
                 }
             }
+
             return templates;
         }
+
 
         public async Task<List<AuthTemplate>> GetAuthTemplate(int id)
         {
@@ -52,7 +70,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
             {
                 await connection.OpenAsync();
                 // Add WHERE clause with parameterized query
-                using (var command = new NpgsqlCommand("SELECT id, templatename, jsoncontent, createdon, createdby FROM authtemplate WHERE id = @id", connection))
+                using (var command = new NpgsqlCommand("SELECT id, templatename, jsoncontent, createdon, createdby, authclassid FROM authtemplate WHERE id = @id", connection))
                 {
                     // Add parameter for id
                     command.Parameters.AddWithValue("@id", id);
@@ -67,7 +85,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                 TemplateName = reader.GetString(1),
                                 JsonContent = reader.GetString(2),
                                 CreatedOn = reader.GetDateTime(3),
-                                CreatedBy = reader.GetInt32(4)
+                                CreatedBy = reader.GetInt32(4),
+                                authclassid = reader.IsDBNull(5) ? null : reader.GetInt32(5)
                             });
                         }
                     }
@@ -86,13 +105,14 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     {
                         await connection.OpenAsync();
                         using (var command = new NpgsqlCommand(
-                            "INSERT INTO authtemplate (jsoncontent, createdby, createdon,templatename) VALUES (@JsonContent::jsonb, @createdby,@createdon, @templateName)", connection))
+                            "INSERT INTO authtemplate (jsoncontent, createdby, createdon,templatename, authclassid) VALUES (@JsonContent::jsonb, @createdby,@createdon, @templateName, @authclassid)", connection))
                         {
                             // Ensure the data is inserted as a JSONB array
                             command.Parameters.AddWithValue("@JsonContent", authTemplate.JsonContent);
                             command.Parameters.AddWithValue("@createdby", authTemplate.CreatedBy);
                             command.Parameters.AddWithValue("@createdon", authTemplate.CreatedOn);
                             command.Parameters.AddWithValue("@templateName", authTemplate.TemplateName);
+                            command.Parameters.AddWithValue("@authclassid", authTemplate.authclassid);
                             // Explicitly set the parameter type as jsonb
                             command.Parameters["@JsonContent"].NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Jsonb;
 

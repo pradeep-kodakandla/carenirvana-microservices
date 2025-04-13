@@ -18,10 +18,10 @@ namespace CareNirvana.Service.API.Controllers
             _saveAuthDetailCommand = saveAuthDetailCommand;
         }
 
-        [HttpGet("fetch")]
-        public async Task<ActionResult<List<AuthTemplate>>> GetAuthTemplates()
+        [HttpGet("fetch/{authclassId}")]
+        public async Task<ActionResult<List<AuthTemplate>>> GetAuthTemplates(int authclassId)
         {
-            var result = await _getAuthTemplatesQuery.ExecuteAsync();
+            var result = await _getAuthTemplatesQuery.ExecuteAsync(authclassId);
             return Ok(result);
         }
 

@@ -52,6 +52,8 @@ builder.Services.AddTransient<GetAuthTemplatesQuery>();
 builder.Services.AddTransient<SaveAuthDetailCommand>();
 builder.Services.AddScoped<IConfigAdminService, ConfigAdminService>();
 builder.Services.AddScoped<IConfigAdminRepository, ConfigAdminRepository>();
+builder.Services.AddScoped<IAuthActivityRepository, AuthActivityRepository>();
+builder.Services.AddScoped<ICodesetsRepository, CodesetsRepository>();
 
 var allowedOrigins = new[] {
     "http://localhost:4200",

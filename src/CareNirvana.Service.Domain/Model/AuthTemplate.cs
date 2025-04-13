@@ -13,5 +13,6 @@ namespace CareNirvana.Service.Domain.Model
         public string JsonContent { get; set; }
         public DateTime CreatedOn { get; set; }
         public int CreatedBy { get; set; }
+        public int? authclassid { get; set; }
     }
 }

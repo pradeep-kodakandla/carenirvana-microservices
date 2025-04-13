@@ -18,9 +18,9 @@ namespace CareNirvana.Service.Application.UseCases
             _repository = repository;
         }
 
-        public async Task<List<AuthTemplate>> ExecuteAsync()
+        public async Task<List<AuthTemplate>> ExecuteAsync(int authclassId)
         {
-            return await _repository.GetAllAsync();
+            return await _repository.GetAllAsync(authclassId);
         }
 
         public async Task<List<AuthTemplate>> GetTemplate(int id)
