@@ -149,5 +149,62 @@ namespace CareNirvana.Service.Infrastructure.Repository
             }
         }
 
+        public async Task<AuthTemplateValidation?> GetByTemplateIdAsync(int templateId)
+        {
+            const string sql = @"SELECT * FROM AuthTemplateValidation WHERE TemplateId = @TemplateId LIMIT 1";
+            using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+            using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@TemplateId", templateId);
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            if (await reader.ReadAsync())
+            {
+                return new AuthTemplateValidation
+                {
+                    Id = reader.GetInt32(0),
+                    TemplateId = reader.GetInt32(1),
+                    ValidationJson = reader.GetString(2),
+                    CreatedOn = reader.GetDateTime(3),
+                    CreatedBy = reader.GetInt32(4),
+                    UpdatedOn = reader.IsDBNull(5) ? null : reader.GetDateTime(5),
+                    UpdatedBy = reader.IsDBNull(6) ? null : reader.GetInt32(6)
+                };
+            }
+
+            return null;
+        }
+
+        public async Task InsertAsync(AuthTemplateValidation entity)
+        {
+            const string sql = @"
+            INSERT INTO AuthTemplateValidation (TemplateId, ValidationJson, CreatedOn, CreatedBy)
+            VALUES (@TemplateId, @ValidationJson, @CreatedOn, @CreatedBy)";
+            using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+            using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@TemplateId", entity.TemplateId);
+            cmd.Parameters.AddWithValue("@ValidationJson", entity.ValidationJson);
+            cmd.Parameters.AddWithValue("@CreatedOn", entity.CreatedOn);
+            cmd.Parameters.AddWithValue("@CreatedBy", entity.CreatedBy);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
+        public async Task UpdateAsync(AuthTemplateValidation entity)
+        {
+            const string sql = @"
+            UPDATE AuthTemplateValidation 
+            SET ValidationJson = @ValidationJson, UpdatedOn = @UpdatedOn, UpdatedBy = @UpdatedBy
+            WHERE TemplateId = @TemplateId";
+            using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+            using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@ValidationJson", entity.ValidationJson);
+            cmd.Parameters.AddWithValue("@UpdatedOn", entity.UpdatedOn ?? DateTime.UtcNow);
+            cmd.Parameters.AddWithValue("@UpdatedBy", entity.UpdatedBy ?? 0);
+            cmd.Parameters.AddWithValue("@TemplateId", entity.TemplateId);
+            await cmd.ExecuteNonQueryAsync();
+        }
+
     }
 }

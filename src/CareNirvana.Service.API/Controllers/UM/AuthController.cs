@@ -72,6 +72,20 @@ namespace CareNirvana.Service.API.Controllers
             }
         }
 
+        [HttpGet("validation/{templateId}")]
+        public async Task<IActionResult> Get(int templateId)
+        {
+            var result = await _getAuthTemplatesQuery.GetByTemplateIdAsync(templateId);
+            return result == null ? NotFound() : Ok(result);
+        }
+
+        [HttpPost("validation/save")]
+        public async Task<IActionResult> Save([FromBody] AuthTemplateValidation dto)
+        {
+            await _getAuthTemplatesQuery.InsertAsync(dto);
+            return Ok(new { message = "Validation rules saved successfully." });
+        }
+
 
         // New API: Get all AuthDetails by Member ID
         [HttpGet("member/{memberId}")]

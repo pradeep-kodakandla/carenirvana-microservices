@@ -12,5 +12,9 @@ namespace CareNirvana.Service.Application.Interfaces
         Task<List<AuthTemplate>> GetAllAsync(int authClassId);
         Task<List<AuthTemplate>> GetAuthTemplate(int id);
         Task SaveAsync(AuthTemplate authTemplate);
+
+        Task<AuthTemplateValidation?> GetByTemplateIdAsync(int templateId);
+        Task InsertAsync(AuthTemplateValidation entity);
+        Task UpdateAsync(AuthTemplateValidation entity);
     }
 }
