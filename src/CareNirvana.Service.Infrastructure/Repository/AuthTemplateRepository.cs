@@ -184,7 +184,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
             await conn.OpenAsync();
             using var cmd = new NpgsqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@TemplateId", entity.TemplateId);
-            cmd.Parameters.AddWithValue("@ValidationJson", entity.ValidationJson);
+            cmd.Parameters.AddWithValue("@ValidationJson", NpgsqlTypes.NpgsqlDbType.Jsonb, entity.ValidationJson);
             cmd.Parameters.AddWithValue("@CreatedOn", entity.CreatedOn);
             cmd.Parameters.AddWithValue("@CreatedBy", entity.CreatedBy);
             await cmd.ExecuteNonQueryAsync();
@@ -199,7 +199,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
             using var conn = new NpgsqlConnection(_connectionString);
             await conn.OpenAsync();
             using var cmd = new NpgsqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("@ValidationJson", entity.ValidationJson);
+            cmd.Parameters.AddWithValue("@ValidationJson", NpgsqlTypes.NpgsqlDbType.Jsonb, entity.ValidationJson);
             cmd.Parameters.AddWithValue("@UpdatedOn", entity.UpdatedOn ?? DateTime.UtcNow);
             cmd.Parameters.AddWithValue("@UpdatedBy", entity.UpdatedBy ?? 0);
             cmd.Parameters.AddWithValue("@TemplateId", entity.TemplateId);

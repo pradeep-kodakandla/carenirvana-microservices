@@ -86,6 +86,13 @@ namespace CareNirvana.Service.API.Controllers
             return Ok(new { message = "Validation rules saved successfully." });
         }
 
+        [HttpPost("validation/update")]
+        public async Task<IActionResult> Update([FromBody] AuthTemplateValidation dto)
+        {
+            await _getAuthTemplatesQuery.UpdateAsync(dto);
+            return Ok(new { message = "Validation rules updated successfully." });
+        }
+
 
         // New API: Get all AuthDetails by Member ID
         [HttpGet("member/{memberId}")]
