@@ -13,6 +13,7 @@ namespace CareNirvana.Service.Domain.Model
         public DateTime? CreatedOn { get; set; }
         public string? AuthNumber { get; set; }
         public int? AuthTypeId { get; set; }
+        public int? AuthClassId { get; set; }
         public int? MemberId { get; set; }
         public DateTime? AuthDueDate { get; set; }
         public DateTime? NextReviewDate { get; set; }

@@ -20,6 +20,7 @@ namespace CareNirvana.Service.Application.UseCases
                 CreatedOn = System.DateTime.UtcNow,
                 AuthNumber = jsonData.AuthNumber,
                 AuthTypeId = jsonData.AuthTypeId,
+                AuthClassId = jsonData.AuthClassId,
                 MemberId = jsonData.MemberId,
                 AuthDueDate = jsonData.AuthDueDate,
                 NextReviewDate = jsonData.NextReviewDate,
