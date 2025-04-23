@@ -2,11 +2,7 @@
 using CareNirvana.Service.Domain.Model;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+
 
 namespace CareNirvana.Service.Infrastructure.Repository
 {
@@ -24,59 +20,108 @@ namespace CareNirvana.Service.Infrastructure.Repository
             return new NpgsqlConnection(_connectionString);
         }
 
-        public async Task<IEnumerable<codesets>> GetAllAsync()
+        public async Task<IEnumerable<codesets>> GetAllAsync(string type)
         {
             var list = new List<codesets>();
 
             using var conn = GetConnection();
             await conn.OpenAsync();
 
-            var cmd = new NpgsqlCommand("SELECT * FROM cfgicdcodesmaster", conn);
-            using var reader = await cmd.ExecuteReaderAsync();
-
-            while (await reader.ReadAsync())
+            if (type == "ICD")
             {
-                list.Add(new codesets
+                var cmd = new NpgsqlCommand("SELECT * FROM cfgicdcodesmaster LIMIT 20", conn);
+                using var reader = await cmd.ExecuteReaderAsync();
+
+                while (await reader.ReadAsync())
                 {
-                    Id = reader["icdcodeid"] != DBNull.Value ? Convert.ToInt32(reader["icdcodeid"]) : null,
-                    code = reader["code"]?.ToString(),
-                    codeDesc = reader["codedescription"]?.ToString(),
-                    codeShortDesc = reader["codeshortdescription"]?.ToString(),
-                    effectiveDate = reader["effectivedate"] as DateTime?,
-                    endDate = reader["enddate"] as DateTime?,
-                    severity = reader["severity"]?.ToString(),
-                    laterality = reader["laterality"]?.ToString(),
-                    activeFlag = reader["activeflag"]?.ToString()
-                });
+                    list.Add(new codesets
+                    {
+                        Id = reader["icdcodeid"] != DBNull.Value ? Convert.ToInt32(reader["icdcodeid"]) : null,
+                        code = reader["code"]?.ToString(),
+                        codeDesc = reader["codedescription"]?.ToString(),
+                        codeShortDesc = reader["codeshortdescription"]?.ToString(),
+                        effectiveDate = reader["effectivedate"] as DateTime?,
+                        endDate = reader["enddate"] as DateTime?,
+                        severity = reader["severity"]?.ToString(),
+                        laterality = reader["laterality"]?.ToString(),
+                        activeFlag = reader["activeflag"]?.ToString(),
+                        type = "ICD"
+                    });
+                }
+            }
+            else
+            {
+                var cmd = new NpgsqlCommand("SELECT * FROM cfgmedicalcodesmaster LIMIT 20", conn);
+                using var reader = await cmd.ExecuteReaderAsync();
+
+                while (await reader.ReadAsync())
+                {
+                    list.Add(new codesets
+                    {
+                        Id = reader["medicalcodemasterid"] != DBNull.Value ? Convert.ToInt32(reader["medicalcodemasterid"]) : null,
+                        code = reader["code"]?.ToString(),
+                        codeDesc = reader["codedescription"]?.ToString(),
+                        codeShortDesc = reader["codeshortdescription"]?.ToString(),
+                        effectiveDate = reader["effectivedate"] as DateTime?,
+                        endDate = reader["enddate"] as DateTime?,
+                        activeFlag = reader["activeflag"]?.ToString(),
+                        type = "CPT"
+                    });
+                }
             }
 
             return list;
         }
 
-        public async Task<codesets?> GetByIdAsync(string id)
+        public async Task<codesets?> GetByIdAsync(string id, string type)
         {
             using var conn = GetConnection();
             await conn.OpenAsync();
 
-            var cmd = new NpgsqlCommand("SELECT * FROM cfgicdcodesmaster WHERE code = @id", conn);
-            cmd.Parameters.AddWithValue("id", id);
-
-            using var reader = await cmd.ExecuteReaderAsync();
-
-            if (await reader.ReadAsync())
+            if (type == "ICD")
             {
-                return new codesets
+                var cmd = new NpgsqlCommand("SELECT * FROM cfgicdcodesmaster WHERE code = @id", conn);
+                cmd.Parameters.AddWithValue("id", id);
+
+                using var reader = await cmd.ExecuteReaderAsync();
+
+                if (await reader.ReadAsync())
                 {
-                    Id = reader["icdcodeid"] != DBNull.Value ? Convert.ToInt32(reader["icdcodeid"]) : null,
-                    code = reader["code"]?.ToString(),
-                    codeDesc = reader["codedescription"]?.ToString(),
-                    codeShortDesc = reader["codeshortdescription"]?.ToString(),
-                    effectiveDate = reader["effectivedate"] as DateTime?,
-                    endDate = reader["enddate"] as DateTime?,
-                    severity = reader["severity"]?.ToString(),
-                    laterality = reader["laterality"]?.ToString(),
-                    activeFlag = reader["activeflag"]?.ToString()
-                };
+                    return new codesets
+                    {
+                        Id = reader["icdcodeid"] != DBNull.Value ? Convert.ToInt32(reader["icdcodeid"]) : null,
+                        code = reader["code"]?.ToString(),
+                        codeDesc = reader["codedescription"]?.ToString(),
+                        codeShortDesc = reader["codeshortdescription"]?.ToString(),
+                        effectiveDate = reader["effectivedate"] as DateTime?,
+                        endDate = reader["enddate"] as DateTime?,
+                        severity = reader["severity"]?.ToString(),
+                        laterality = reader["laterality"]?.ToString(),
+                        activeFlag = reader["activeflag"]?.ToString(),
+                        type = "ICD"
+                    };
+                }
+            }
+            else
+            {
+                var cmd = new NpgsqlCommand("SELECT * FROM cfgmedicalcodesmaster WHERE code = @id", conn);
+                cmd.Parameters.AddWithValue("id", id);
+                using var reader = await cmd.ExecuteReaderAsync();
+
+                while (await reader.ReadAsync())
+                {
+                    return new codesets
+                    {
+                        Id = reader["medicalcodemasterid"] != DBNull.Value ? Convert.ToInt32(reader["medicalcodemasterid"]) : null,
+                        code = reader["code"]?.ToString(),
+                        codeDesc = reader["codedescription"]?.ToString(),
+                        codeShortDesc = reader["codeshortdescription"]?.ToString(),
+                        effectiveDate = reader["effectivedate"] as DateTime?,
+                        endDate = reader["enddate"] as DateTime?,
+                        activeFlag = reader["activeflag"]?.ToString(),
+                        type = "CPT"
+                    };
+                }
             }
 
             return null;

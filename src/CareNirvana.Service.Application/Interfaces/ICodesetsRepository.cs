@@ -9,8 +9,8 @@ namespace CareNirvana.Service.Application.Interfaces
 {
     public interface ICodesetsRepository
     {
-        Task<IEnumerable<codesets>> GetAllAsync();
-        Task<codesets?> GetByIdAsync(string id);
+        Task<IEnumerable<codesets>> GetAllAsync(string type);
+        Task<codesets?> GetByIdAsync(string id, string type);
         Task<codesets> InsertAsync(codesets entity);
         Task<codesets> UpdateAsync(codesets entity);
     }

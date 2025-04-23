@@ -17,5 +17,6 @@ namespace CareNirvana.Service.Domain.Model
         public string severity { get; set; }
         public string laterality { get; set; }
         public string activeFlag { get; set; }
+        public string type { get; set; }
     }
 }

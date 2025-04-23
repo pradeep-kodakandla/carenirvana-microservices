@@ -16,14 +16,21 @@ namespace CareNirvana.Service.API.Controllers
             _service = service;
         }
 
-        [HttpGet]
-        public async Task<IActionResult> GetAll() =>
-            Ok(await _service.GetAllAsync());
-
-        [HttpGet("{id}")]
-        public async Task<IActionResult> Get(string id)
+        [HttpGet("type/{type}")]
+        public async Task<IActionResult> GetAll(string type)
         {
-            var result = await _service.GetByIdAsync(id);
+            var result = await _service.GetAllAsync(type);
+            return result == null ? NotFound() : Ok(result);
+        }
+
+        //[HttpGet("{type}")]
+        //public async Task<IActionResult> GetAll() =>
+        //    Ok(await _service.GetAllAsync());
+
+        [HttpGet("{id}/{type}")]
+        public async Task<IActionResult> Get(string id, string type)
+        {
+            var result = await _service.GetByIdAsync(id, type);
             return result == null ? NotFound() : Ok(result);
         }
 

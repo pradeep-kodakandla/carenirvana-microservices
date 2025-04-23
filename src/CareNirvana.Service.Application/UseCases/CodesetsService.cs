@@ -17,14 +17,14 @@ namespace CareNirvana.Service.Application.UseCases
             _repository = repository;
         }
 
-        public async Task<IEnumerable<codesets>> GetAllAsync()
+        public async Task<IEnumerable<codesets>> GetAllAsync(string type)
         {
-            return await _repository.GetAllAsync();
+            return await _repository.GetAllAsync(type);
         }
 
-        public async Task<codesets?> GetByIdAsync(string id)
+        public async Task<codesets?> GetByIdAsync(string id, string type)
         {
-            return await _repository.GetByIdAsync(id);
+            return await _repository.GetByIdAsync(id, type);
         }
 
         public async Task<codesets> InsertAsync(codesets entity)
