@@ -25,5 +25,6 @@ namespace CareNirvana.Service.Domain.Model
         public int? UpdatedBy { get; set; }
         public int? DeletedBy { get; set; }
         public string responseData { get; set; } // Store as a JSON string
+        public int? AuthAssignedTo { get; set; }
     }
 }

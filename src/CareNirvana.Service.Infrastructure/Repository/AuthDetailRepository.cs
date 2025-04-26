@@ -52,8 +52,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 {
                     await connection.OpenAsync();
                     using (var command = new NpgsqlCommand(
-                        "INSERT INTO authdetail (data, createdon, createdby, authnumber, authtypeid, memberid, authduedate, nextreviewdate, treatementtype, authclassid ) " +
-                        "VALUES (@data, @createdon, @createdby, @authNumber, @authTypeId, @memberId, @authDueDate, @nextReviewDate, @treatmentType, @authclassid )", connection))
+                        "INSERT INTO authdetail (data, createdon, createdby, authnumber, authtypeid, memberid, authduedate, nextreviewdate, treatementtype, authclassid, authassignedto ) " +
+                        "VALUES (@data, @createdon, @createdby, @authNumber, @authTypeId, @memberId, @authDueDate, @nextReviewDate, @treatmentType, @authclassid, @authassignedto )", connection))
                     {
                         // Convert objects inside List<object> to proper JSON-compatible objects
                         var processedData = authDetail.Data.Select(item =>
@@ -77,6 +77,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                         command.Parameters.AddWithValue("@nextReviewDate", authDetail.NextReviewDate);
                         command.Parameters.AddWithValue("@treatmentType", authDetail.TreatmentType);
                         command.Parameters.AddWithValue("@authclassid", authDetail.AuthClassId);
+                        command.Parameters.AddWithValue("@authassignedto", authDetail.AuthAssignedTo);
                         await command.ExecuteNonQueryAsync();
                     }
                 }
@@ -130,6 +131,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                         command.Parameters.AddWithValue("@nextReviewDate", authDetail.NextReviewDate);
                         command.Parameters.AddWithValue("@treatmentType", authDetail.TreatmentType);
                         command.Parameters.AddWithValue("@authNumber", authDetail.AuthNumber); // Used in WHERE condition
+                        command.Parameters.AddWithValue("@authassignedto", authDetail.AuthAssignedTo);
 
                         await command.ExecuteNonQueryAsync();
                     }
@@ -185,7 +187,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 {
                     await connection.OpenAsync();
                     using (var command = new NpgsqlCommand(
-                        "SELECT authdetailid, authnumber, authtypeid, memberid, authduedate, nextreviewdate, treatementtype, data, createdon, createdby, updatedon, updatedby, deletedon, deletedby, authclassid " +
+                        "SELECT authdetailid, authnumber, authtypeid, memberid, authduedate, nextreviewdate, treatementtype, data, createdon, createdby, updatedon, updatedby, deletedon, deletedby, authclassid, authassignedto " +
                         "FROM authdetail WHERE memberid = @memberId AND deletedon IS NULL", connection))
                     {
                         command.Parameters.AddWithValue("@memberId", memberId);
@@ -211,6 +213,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                     DeletedOn = reader.IsDBNull(12) ? null : reader.GetDateTime(12),
                                     DeletedBy = reader.IsDBNull(13) ? null : reader.GetInt32(13),
                                     AuthClassId = reader.IsDBNull(14) ? null : reader.GetInt32(14),
+                                    AuthAssignedTo = reader.IsDBNull(15) ? null : reader.GetInt32(15)
                                 });
                             }
                         }
@@ -236,7 +239,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 {
                     await connection.OpenAsync();
                     using (var command = new NpgsqlCommand(
-                        "SELECT authdetailid, authnumber, authtypeid, memberid, authduedate, nextreviewdate, treatementtype, data, createdon, createdby, updatedon, updatedby, deletedon, deletedby, authclassid " +
+                        "SELECT authdetailid, authnumber, authtypeid, memberid, authduedate, nextreviewdate, treatementtype, data, createdon, createdby, updatedon, updatedby, deletedon, deletedby, authclassid, authassignedto " +
                         "FROM authdetail WHERE authnumber = @authNumber AND deletedon IS NULL", connection))
                     {
                         command.Parameters.AddWithValue("@authNumber", authNumber);
@@ -262,6 +265,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                     DeletedOn = reader.IsDBNull(12) ? null : reader.GetDateTime(12),
                                     DeletedBy = reader.IsDBNull(13) ? null : reader.GetInt32(13),
                                     AuthClassId = reader.IsDBNull(14) ? null : reader.GetInt32(14),
+                                    AuthAssignedTo = reader.IsDBNull(15) ? null : reader.GetInt32(15)
                                 });
                             }
                         }

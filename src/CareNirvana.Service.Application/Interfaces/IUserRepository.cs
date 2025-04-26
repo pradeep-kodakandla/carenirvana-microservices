@@ -6,5 +6,6 @@ namespace CareNirvana.Service.Application.Interfaces
     {
         bool ValidateUser(string userName, string password);
         SecurityUser? GetUser(string username, string password);
+        Task<List<SecurityUser>> GetUserDetails();
     }
 }

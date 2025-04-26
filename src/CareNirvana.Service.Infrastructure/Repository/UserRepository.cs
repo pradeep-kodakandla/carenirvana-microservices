@@ -102,6 +102,36 @@ namespace CareNirvana.Service.Infrastructure.Repository
             }
         }
 
+        public async Task<List<SecurityUser>> GetUserDetails()
+        {
+            var securityUser = new List<SecurityUser>();
+
+            try
+            {
+                {
+                    var sql = "SELECT username, userid from securityuser where deletedon IS NULL";
+
+                    using (var reader = _dataLayer.ExecuteDataReader(sql))
+                    {
+                        while (reader.Read())
+                        {
+                            securityUser.Add(new SecurityUser
+                            {
+                                UserName = reader.GetString(0),
+                                UserId = reader.GetInt32(1)
+                            });
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Database Error: {ex.Message}");
+                throw;
+            }
+            return securityUser;
+        }
+
     }
 
 }

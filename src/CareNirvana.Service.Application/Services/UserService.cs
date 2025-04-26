@@ -22,6 +22,11 @@ namespace CareNirvana.Service.Application.Services
             if (user == null) return null;
             return user;
         }
+
+        public Task<List<SecurityUser>> GetUserDetails()
+        {
+            return _userRepository.GetUserDetails();
+        }
     }
 }
 

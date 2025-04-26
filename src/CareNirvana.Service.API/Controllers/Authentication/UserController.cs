@@ -58,4 +58,11 @@ public class UserController : ControllerBase
 
         return Ok(response); // Simplified return, CORS middleware will handle headers
     }
+
+    [HttpGet("alluser")]
+    public async Task<ActionResult<List<SecurityUser>>> GetAllUsers()
+    {
+        var users = await _userService.GetUserDetails();
+        return Ok(users);
+    }
 }
