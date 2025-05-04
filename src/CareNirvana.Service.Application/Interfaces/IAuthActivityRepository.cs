@@ -9,7 +9,7 @@ namespace CareNirvana.Service.Application.Interfaces
 {
     public interface IAuthActivityRepository
     {
-        Task<IEnumerable<AuthActivity>> GetAllAsync();
+        Task<IEnumerable<AuthActivity>> GetAllAsync(int authdetailid);
         Task<AuthActivity?> GetByIdAsync(int id);
         Task<AuthActivity> InsertAsync(AuthActivity activity);
         Task<AuthActivity> UpdateAsync(AuthActivity activity);

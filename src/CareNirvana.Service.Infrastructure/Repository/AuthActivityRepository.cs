@@ -29,14 +29,15 @@ namespace CareNirvana.Service.Infrastructure.Repository
             return new NpgsqlConnection(_connectionString);
         }
 
-        public async Task<IEnumerable<AuthActivity>> GetAllAsync()
+        public async Task<IEnumerable<AuthActivity>> GetAllAsync(int authdetailid)
         {
             var result = new List<AuthActivity>();
 
             using var conn = GetConnection();
             await conn.OpenAsync();
 
-            var cmd = new NpgsqlCommand("SELECT * FROM authactivity WHERE deletedon IS NULL", conn);
+            var cmd = new NpgsqlCommand("SELECT * FROM authactivity WHERE authdetailid = @id and deletedon IS NULL", conn);
+            cmd.Parameters.AddWithValue("id", authdetailid);
             using var reader = await cmd.ExecuteReaderAsync();
 
             while (await reader.ReadAsync())
@@ -50,7 +51,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     ProviderId = reader["providerid"] as int?,
                     FollowUpDateTime = reader["followupdatetime"] as DateTime?,
                     DueDate = reader["duedate"] as DateTime?,
-                    ReferredTo = reader["referredto"] as string,
+                    ReferredTo = reader["referredto"] as int?,
                     IsWorkBasket = reader["isworkbasket"] as bool?,
                     QueueId = reader["queueid"] as int?,
                     Comment = reader["comment"] as string,
@@ -91,7 +92,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     ProviderId = reader["providerid"] as int?,
                     FollowUpDateTime = reader["followupdatetime"] as DateTime?,
                     DueDate = reader["duedate"] as DateTime?,
-                    ReferredTo = reader["referredto"] as string,
+                    ReferredTo = reader["referredto"] as int?,
                     IsWorkBasket = reader["isworkbasket"] as bool?,
                     QueueId = reader["queueid"] as int?,
                     Comment = reader["comment"] as string,

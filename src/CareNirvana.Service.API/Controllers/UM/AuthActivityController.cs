@@ -16,9 +16,9 @@ namespace CareNirvana.Service.API.Controllers
             _service = service;
         }
 
-        [HttpGet]
-        public async Task<IActionResult> GetAll() =>
-            Ok(await _service.GetAllAsync());
+        [HttpGet("authdetail/{authdetailid}")]
+        public async Task<IActionResult> GetAll(int authdetailid) =>
+            Ok(await _service.GetAllAsync(authdetailid));
 
         [HttpGet("{id}")]
         public async Task<IActionResult> Get(int id)

@@ -15,7 +15,7 @@ namespace CareNirvana.Service.Domain.Model
         public int? ProviderId { get; set; }
         public DateTime? FollowUpDateTime { get; set; }
         public DateTime? DueDate { get; set; }
-        public string? ReferredTo { get; set; }
+        public int? ReferredTo { get; set; }
         public bool? IsWorkBasket { get; set; }
         public int? QueueId { get; set; }
         public string? Comment { get; set; }

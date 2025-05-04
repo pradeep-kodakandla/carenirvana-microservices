@@ -41,9 +41,18 @@ namespace CareNirvana.Service.API.Controllers
                 {
                     return BadRequest("Invalid data received");
                 }
+                var result = await _saveAuthDetailCommand.ExecuteAsync(authDetail);
 
-                await _saveAuthDetailCommand.ExecuteAsync(authDetail);
-                return Ok("Data saved successfully");
+                if (result.HasValue)
+                {
+                    // New insert: return 201 Created with the new ID
+                    return CreatedAtAction(nameof(SaveAuthDetail), new { id = result.Value }, new { id = result.Value, message = "Data saved successfully" });
+                }
+                else
+                {
+                    // Update/Delete: no ID to return
+                    return Ok(new { message = "Data updated or deleted successfully" });
+                }
             }
             catch (Exception ex)
             {

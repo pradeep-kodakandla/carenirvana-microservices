@@ -12,28 +12,10 @@ namespace CareNirvana.Service.Application.UseCases
             _repository = repository;
         }
 
-        public async Task ExecuteAsync(AuthDetail jsonData)
+        public async Task<long?> ExecuteAsync(AuthDetail jsonData)
         {
-            var authDetail = new AuthDetail
-            {
-                Data = jsonData.Data,
-                CreatedOn = System.DateTime.UtcNow,
-                AuthNumber = jsonData.AuthNumber,
-                AuthTypeId = jsonData.AuthTypeId,
-                AuthClassId = jsonData.AuthClassId,
-                MemberId = jsonData.MemberId,
-                AuthDueDate = jsonData.AuthDueDate,
-                NextReviewDate = jsonData.NextReviewDate,
-                UpdatedOn = System.DateTime.UtcNow,
-                DeletedOn = jsonData.DeletedOn,
-                SaveType = jsonData.SaveType,
-                TreatmentType = jsonData.TreatmentType,
-                CreatedBy = jsonData.CreatedBy,
-                UpdatedBy = jsonData.UpdatedBy,
-                DeletedBy = jsonData.DeletedBy
-            };
-
-            await _repository.SaveAsync(jsonData);
+            var insertedId = await _repository.SaveAsync(jsonData);
+            return insertedId;
         }
 
         public async Task<List<AuthDetail>> GetAllAsync(int memberId)

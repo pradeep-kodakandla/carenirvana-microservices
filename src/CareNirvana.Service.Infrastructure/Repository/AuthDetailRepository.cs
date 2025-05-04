@@ -20,21 +20,28 @@ namespace CareNirvana.Service.Infrastructure.Repository
             _connectionString = configuration.GetConnectionString("DefaultConnection");
         }
 
-        public async Task SaveAsync(AuthDetail authDetail)
+        public async Task<long?> SaveAsync(AuthDetail authDetail)
         {
             try
             {
                 if (authDetail.SaveType == "Add")
                 {
-                    await InsertAuthDetail(authDetail);
+                    var insertedId = await InsertAuthDetail(authDetail);
+                    return insertedId;
                 }
                 else if (authDetail.SaveType == "Update")
                 {
                     await UpdateAuthDetail(authDetail);
+                    return null;
                 }
                 else if (authDetail.SaveType == "Delete")
                 {
                     await DeleteAuthDetail(authDetail);
+                    return null;
+                }
+                else
+                {
+                    throw new InvalidOperationException("Invalid SaveType: " + authDetail.SaveType);
                 }
             }
             catch (Exception ex)
@@ -44,7 +51,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
             }
         }
 
-        public async Task InsertAuthDetail(AuthDetail authDetail)
+        public async Task<long> InsertAuthDetail(AuthDetail authDetail)
         {
             try
             {
@@ -52,8 +59,11 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 {
                     await connection.OpenAsync();
                     using (var command = new NpgsqlCommand(
-                        "INSERT INTO authdetail (data, createdon, createdby, authnumber, authtypeid, memberid, authduedate, nextreviewdate, treatementtype, authclassid, authassignedto ) " +
-                        "VALUES (@data, @createdon, @createdby, @authNumber, @authTypeId, @memberId, @authDueDate, @nextReviewDate, @treatmentType, @authclassid, @authassignedto )", connection))
+                                    @"INSERT INTO authdetail 
+                                    (data, createdon, createdby, authnumber, authtypeid, memberid, authduedate, nextreviewdate, treatementtype, authclassid, authassignedto)
+                                    VALUES 
+                                    (@data, @createdon, @createdby, @authNumber, @authTypeId, @memberId, @authDueDate, @nextReviewDate, @treatmentType, @authclassid, @authassignedto)
+                                    RETURNING authdetailid;", connection))
                     {
                         // Convert objects inside List<object> to proper JSON-compatible objects
                         var processedData = authDetail.Data.Select(item =>
@@ -78,7 +88,9 @@ namespace CareNirvana.Service.Infrastructure.Repository
                         command.Parameters.AddWithValue("@treatmentType", authDetail.TreatmentType);
                         command.Parameters.AddWithValue("@authclassid", authDetail.AuthClassId);
                         command.Parameters.AddWithValue("@authassignedto", 1);
-                        await command.ExecuteNonQueryAsync();
+                        var result = await command.ExecuteScalarAsync();
+                        long insertedId = Convert.ToInt64(result);
+                        return insertedId;
                     }
                 }
             }
