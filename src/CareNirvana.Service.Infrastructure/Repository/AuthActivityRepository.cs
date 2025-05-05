@@ -150,36 +150,59 @@ namespace CareNirvana.Service.Infrastructure.Repository
             using var conn = GetConnection();
             await conn.OpenAsync();
 
-            var cmd = new NpgsqlCommand(@"
+            NpgsqlCommand cmd;
+
+            if (activity.DeletedBy != null)
+            {
+                // 🛡️ Soft delete logic
+                cmd = new NpgsqlCommand(@"
             UPDATE authactivity SET 
-            authdetailid = @authdetailid, activitytypeid = @activitytypeid, priorityid = @priorityid,
-            providerid = @providerid, followupdatetime = @followupdatetime, duedate = @duedate, referredto = @referredto,
-            isworkbasket = @isworkbasket, queueid = @queueid, comment = @comment, statusid = @statusid,
-            performeddatetime = @performeddatetime, performedby = @performedby, activeflag = @activeflag,
-            updatedon = @updatedon, updatedby = @updatedby
+                deletedby = @deletedby,
+                deletedon = @deletedon,
+                activeflag = @activeflag
+            WHERE authdetailid = @authdetailid AND authactivityid = @authactivityid", conn);
+
+                cmd.Parameters.AddWithValue("deletedby", activity.DeletedBy);
+                cmd.Parameters.AddWithValue("deletedon", activity.DeletedOn ?? DateTime.UtcNow);
+                cmd.Parameters.AddWithValue("activeflag", activity.ActiveFlag ?? false);
+                cmd.Parameters.AddWithValue("authdetailid", (object?)activity.AuthDetailId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("authactivityid", activity.AuthActivityId);
+            }
+            else
+            {
+                // ✨ Normal full update logic
+                cmd = new NpgsqlCommand(@"
+            UPDATE authactivity SET 
+                authdetailid = @authdetailid, activitytypeid = @activitytypeid, priorityid = @priorityid,
+                providerid = @providerid, followupdatetime = @followupdatetime, duedate = @duedate, referredto = @referredto,
+                isworkbasket = @isworkbasket, queueid = @queueid, comment = @comment, statusid = @statusid,
+                performeddatetime = @performeddatetime, performedby = @performedby, activeflag = @activeflag,
+                updatedon = @updatedon, updatedby = @updatedby
             WHERE authactivityid = @authactivityid", conn);
 
-            cmd.Parameters.AddWithValue("authactivityid", activity.AuthActivityId);
-            cmd.Parameters.AddWithValue("authdetailid", (object?)activity.AuthDetailId ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("activitytypeid", (object?)activity.ActivityTypeId ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("priorityid", (object?)activity.PriorityId ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("providerid", (object?)activity.ProviderId ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("followupdatetime", (object?)activity.FollowUpDateTime ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("duedate", (object?)activity.DueDate ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("referredto", (object?)activity.ReferredTo ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("isworkbasket", (object?)activity.IsWorkBasket ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("queueid", (object?)activity.QueueId ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("comment", (object?)activity.Comment ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("statusid", (object?)activity.StatusId ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("performeddatetime", (object?)activity.PerformedDateTime ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("performedby", (object?)activity.PerformedBy ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("activeflag", (object?)activity.ActiveFlag ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("updatedon", activity.UpdatedOn ?? DateTime.UtcNow);
-            cmd.Parameters.AddWithValue("updatedby", (object?)activity.UpdatedBy ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("authactivityid", activity.AuthActivityId);
+                cmd.Parameters.AddWithValue("authdetailid", (object?)activity.AuthDetailId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("activitytypeid", (object?)activity.ActivityTypeId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("priorityid", (object?)activity.PriorityId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("providerid", (object?)activity.ProviderId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("followupdatetime", (object?)activity.FollowUpDateTime ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("duedate", (object?)activity.DueDate ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("referredto", (object?)activity.ReferredTo ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("isworkbasket", (object?)activity.IsWorkBasket ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("queueid", (object?)activity.QueueId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("comment", (object?)activity.Comment ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("statusid", (object?)activity.StatusId ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("performeddatetime", (object?)activity.PerformedDateTime ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("performedby", (object?)activity.PerformedBy ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("activeflag", (object?)activity.ActiveFlag ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("updatedon", activity.UpdatedOn ?? DateTime.UtcNow);
+                cmd.Parameters.AddWithValue("updatedby", (object?)activity.UpdatedBy ?? DBNull.Value);
+            }
 
             await cmd.ExecuteNonQueryAsync();
             return activity;
         }
+
     }
 
 }
