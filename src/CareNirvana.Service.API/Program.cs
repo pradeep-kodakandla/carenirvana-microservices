@@ -54,6 +54,7 @@ builder.Services.AddScoped<IConfigAdminService, ConfigAdminService>();
 builder.Services.AddScoped<IConfigAdminRepository, ConfigAdminRepository>();
 builder.Services.AddScoped<IAuthActivityRepository, AuthActivityRepository>();
 builder.Services.AddScoped<ICodesetsRepository, CodesetsRepository>();
+builder.Services.AddScoped<IRolePermissionConfigRepository, RolePermissionConfigRepository>();
 
 var allowedOrigins = new[] {
     "http://localhost:4200",
