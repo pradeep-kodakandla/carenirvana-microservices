@@ -44,5 +44,41 @@ namespace CareNirvana.Service.API.Controllers.Admin
             var resources = await _configRepository.GetResourcesByFeatureAsync(featureId);
             return Ok(resources);
         }
+
+
+
+
+        [HttpGet]
+        public async Task<IActionResult> GetAll() => Ok(await _configRepository.GetAllAsync());
+
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetById(int id)
+        {
+            var result = await _configRepository.GetByIdAsync(id);
+            return result is null ? NotFound() : Ok(result);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> Add([FromBody] CfgRole role)
+        {
+            var id = await _configRepository.AddAsync(role);
+            return CreatedAtAction(nameof(GetById), new { id }, role);
+        }
+
+        [HttpPut("{id}")]
+        public async Task<IActionResult> Update(int id, [FromBody] CfgRole role)
+        {
+            role.RoleId = id;
+            await _configRepository.UpdateAsync(role);
+            return NoContent();
+        }
+
+        [HttpDelete("{id}")]
+        public async Task<IActionResult> Delete(int id, [FromQuery] int deletedBy)
+        {
+            await _configRepository.DeleteAsync(id, deletedBy);
+            return NoContent();
+        }
+
     }
 }
