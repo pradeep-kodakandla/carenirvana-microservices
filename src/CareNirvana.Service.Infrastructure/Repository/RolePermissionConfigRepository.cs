@@ -263,5 +263,43 @@ namespace CareNirvana.Service.Infrastructure.Repository
             await cmd.ExecuteNonQueryAsync();
         }
 
+        public async Task<IEnumerable<CfgResourceField>> GetResourceFieldsByResourceIdAsync(int resourceId)
+        {
+            var list = new List<CfgResourceField>();
+
+            using var conn = GetConnection();
+            await conn.OpenAsync();
+
+            var cmd = new NpgsqlCommand(@"
+        SELECT resourcefieldid, resourceid, fieldname, allow_edit, allow_visible, activeflag,
+               createdon, createdby, updatedon, updatedby, deletedon, deletedby
+        FROM cfgresourcefield
+        WHERE resourceid = @resourceId AND deletedon IS NULL", conn);
+
+            cmd.Parameters.AddWithValue("resourceId", resourceId);
+
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                list.Add(new CfgResourceField
+                {
+                    ResourceFieldId = reader.GetInt32(0),
+                    ResourceId = reader.GetInt32(1),
+                    FieldName = reader.GetString(2),
+                    AllowEdit = reader.GetBoolean(3),
+                    AllowVisible = reader.GetBoolean(4),
+                    ActiveFlag = reader.GetBoolean(5),
+                    CreatedOn = reader.IsDBNull(6) ? null : reader.GetDateTime(6),
+                    CreatedBy = reader.IsDBNull(7) ? null : reader.GetInt32(7),
+                    UpdatedOn = reader.IsDBNull(8) ? null : reader.GetDateTime(8),
+                    UpdatedBy = reader.IsDBNull(9) ? null : reader.GetInt32(9),
+                    DeletedOn = reader.IsDBNull(10) ? null : reader.GetDateTime(10),
+                    DeletedBy = reader.IsDBNull(11) ? null : reader.GetInt32(11)
+                });
+            }
+
+            return list;
+        }
+
     }
 }

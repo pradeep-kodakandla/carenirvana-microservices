@@ -25,6 +25,8 @@ namespace CareNirvana.Service.Application.Services
 
         public Task<IEnumerable<CfgResource>> GetResourcesByFeatureAsync(int featureId) => _repo.GetResourcesByFeatureAsync(featureId);
 
+        public Task<IEnumerable<CfgResourceField>> GetResourceFieldsByResourceIdAsync(int resourceId) => _repo.GetResourceFieldsByResourceIdAsync(resourceId);
+
         public Task<IEnumerable<CfgRole>> GetAllAsync() => _repo.GetAllAsync();
         public Task<CfgRole?> GetByIdAsync(int roleId) => _repo.GetByIdAsync(roleId);
         public Task<int> AddAsync(CfgRole role) => _repo.AddAsync(role);

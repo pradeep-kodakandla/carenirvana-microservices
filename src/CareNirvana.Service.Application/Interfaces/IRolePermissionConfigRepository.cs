@@ -14,6 +14,7 @@ namespace CareNirvana.Service.Application.Interfaces
         Task<IEnumerable<CfgFeatureGroup>> GetFeatureGroupsByModuleAsync(int moduleId);
         Task<IEnumerable<CfgFeature>> GetFeaturesByFeatureGroupAsync(int featureGroupId);
         Task<IEnumerable<CfgResource>> GetResourcesByFeatureAsync(int featureId);
+        Task<IEnumerable<CfgResourceField>> GetResourceFieldsByResourceIdAsync(int resourceId);
 
         Task<IEnumerable<CfgRole>> GetAllAsync();
         Task<CfgRole?> GetByIdAsync(int roleId);

@@ -45,9 +45,6 @@ namespace CareNirvana.Service.API.Controllers.Admin
             return Ok(resources);
         }
 
-
-
-
         [HttpGet]
         public async Task<IActionResult> GetAll() => Ok(await _configRepository.GetAllAsync());
 
@@ -80,5 +77,11 @@ namespace CareNirvana.Service.API.Controllers.Admin
             return NoContent();
         }
 
+        [HttpGet("resourcefields/{resourceId}")]
+        public async Task<ActionResult<IEnumerable<CfgResourceField>>> GetResourceFieldsByResourceId(int resourceId)
+        {
+            var fields = await _configRepository.GetResourceFieldsByResourceIdAsync(resourceId);
+            return Ok(fields);
+        }
     }
 }
