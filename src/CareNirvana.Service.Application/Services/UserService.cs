@@ -27,6 +27,27 @@ namespace CareNirvana.Service.Application.Services
         {
             return _userRepository.GetUserDetails();
         }
+        public async Task<IEnumerable<SecurityUser>> GetAllAsync()
+        {
+            return await _userRepository.GetAllAsync();
+        }
+        public async Task<SecurityUser?> GetByIdAsync(int userId)
+        {
+            return await _userRepository.GetByIdAsync(userId);
+        }
+        public async Task<int> AddAsync(SecurityUser user)
+        {
+            return await _userRepository.AddAsync(user);
+        }
+        public async Task UpdateAsync(SecurityUser user)
+        {
+            await _userRepository.UpdateAsync(user);
+        }
+        public async Task DeleteAsync(int userId, int deletedBy)
+        {
+            await _userRepository.DeleteAsync(userId, deletedBy);
+        }
+
     }
 }
 

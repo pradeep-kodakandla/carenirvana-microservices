@@ -65,4 +65,40 @@ public class UserController : ControllerBase
         var users = await _userService.GetUserDetails();
         return Ok(users);
     }
+
+    // 📦 Get full user data with details by ID
+    [HttpGet("{id}")]
+    public async Task<ActionResult<SecurityUser>> GetUserById(int id)
+    {
+        var user = await _userService.GetByIdAsync(id);
+        if (user == null) return NotFound();
+        return Ok(user);
+    }
+
+    // ➕ Add new user
+    [HttpPost]
+    public async Task<ActionResult<int>> AddUser([FromBody] SecurityUser user)
+    {
+        var id = await _userService.AddAsync(user);
+        return CreatedAtAction(nameof(GetUserById), new { id }, id);
+    }
+
+    // ✏️ Update user
+    [HttpPut("{id}")]
+    public async Task<IActionResult> UpdateUser(int id, [FromBody] SecurityUser user)
+    {
+        if (id != user.UserId)
+            return BadRequest("User ID mismatch");
+
+        await _userService.UpdateAsync(user);
+        return NoContent();
+    }
+
+    // ❌ Delete user
+    [HttpDelete("{id}")]
+    public async Task<IActionResult> DeleteUser(int id, [FromQuery] int deletedBy)
+    {
+        await _userService.DeleteAsync(id, deletedBy);
+        return NoContent();
+    }
 }

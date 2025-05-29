@@ -57,5 +57,12 @@ namespace CareNirvana.Service.Domain.Model
         public bool IsLocked { get; set; }
 
         public bool ActiveFlag { get; set; }
+        public DateTime CreatedOn { get; set; }
+        public int CreatedBy { get; set; }
+        public DateTime? UpdatedOn { get; set; }
+        public int? UpdatedBy { get; set; }
+        public DateTime? DeletedOn { get; set; }
+        public int? DeletedBy { get; set; }
     }
 }
+
