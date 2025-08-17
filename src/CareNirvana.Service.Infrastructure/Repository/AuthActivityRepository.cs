@@ -300,9 +300,12 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 await tx.CommitAsync();
                 return payload.Activity.AuthActivityId;
             }
-            catch
+            catch (Exception ex)
             {
                 await tx.RollbackAsync();
+
+                Console.WriteLine($"Error saving auth detail: {ex.Message}");
+
                 throw;
             }
         }
@@ -376,7 +379,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
             await conn.OpenAsync();
 
             // --- Build WHERE clause dynamically ---
-            var whereClauses = new List<string> { "deletedon IS NULL" };
+            var whereClauses = new List<string> { "deletedon IS NULL AND service_line_count <> 0 " };
             if (activityId.HasValue)
                 whereClauses.Add("authactivityid = @activityid");
             if (authDetailId.HasValue)
@@ -396,6 +399,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 parentCmd.Parameters.AddWithValue("activityid", activityId.Value);
             if (authDetailId.HasValue)
                 parentCmd.Parameters.AddWithValue("authdetailid", authDetailId.Value);
+
 
             var parentList = new List<AuthActivity>();
             await using (var reader = await parentCmd.ExecuteReaderAsync())

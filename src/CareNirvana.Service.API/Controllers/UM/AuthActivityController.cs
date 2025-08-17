@@ -45,12 +45,18 @@ namespace CareNirvana.Service.API.Controllers
 
         // GET api/AuthActivity/mdreview?activityId=123&authDetailId=456
         [HttpGet("mdreview")]
-        public async Task<IActionResult> GetMdReviewActivities(
-            [FromQuery] int? activityId = null,
-            [FromQuery] int? authDetailId = null)
+        public async Task<IActionResult> GetMdReviewActivities( [FromQuery] int? activityId = null, [FromQuery] int? authDetailId = null)
         {
             var list = await _service.GetMdReviewActivitiesAsync(activityId, authDetailId);
-            return Ok(list);
+
+            // Turn (Activity, Lines) tuples into objects with properties
+            var dto = list.Select(t => new
+            {
+                Activity = t.Activity,
+                Lines = t.Lines
+            });
+
+            return Ok(dto);
         }
 
 
