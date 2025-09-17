@@ -55,6 +55,9 @@ builder.Services.AddScoped<IConfigAdminRepository, ConfigAdminRepository>();
 builder.Services.AddScoped<IAuthActivityRepository, AuthActivityRepository>();
 builder.Services.AddScoped<ICodesetsRepository, CodesetsRepository>();
 builder.Services.AddScoped<IRolePermissionConfigRepository, RolePermissionConfigRepository>();
+builder.Services.AddScoped<IDashboardRepository, DashboardRepository >();
+builder.Services.AddScoped<IMemberEnrollmentRepository, MemberEnrollmentRepository>();
+
 
 var allowedOrigins = new[] {
     "http://localhost:4200",
