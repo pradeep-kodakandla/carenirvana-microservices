@@ -1,4 +1,6 @@
-﻿using System;
+﻿using CareNirvana.Service.Application.Interfaces;
+using CareNirvana.Service.Domain.Model;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -6,7 +8,15 @@ using System.Threading.Tasks;
 
 namespace CareNirvana.Service.Application.Services
 {
-    internal class DashboardService
+    public class DashboardService : IDashboardRepository
     {
+        private readonly IDashboardRepository _repo;
+        public DashboardService(IDashboardRepository repo)
+        {
+            _repo = repo;
+        }
+        public Task<List<MemberCareStaff>> GetMyCareStaff(int userId) => _repo.GetMyCareStaff(userId);
+        public Task<DashboardCounts> DashBoardCount(int userId) => _repo.DashBoardCount(userId);
     }
+
 }

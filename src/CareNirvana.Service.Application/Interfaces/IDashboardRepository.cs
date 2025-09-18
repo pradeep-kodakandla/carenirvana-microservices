@@ -1,4 +1,5 @@
-﻿using System;
+﻿using CareNirvana.Service.Domain.Model;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -8,5 +9,7 @@ namespace CareNirvana.Service.Application.Interfaces
 {
     public interface IDashboardRepository
     {
+        Task<List<MemberCareStaff>> GetMyCareStaff(int userId);
+        Task<DashboardCounts> DashBoardCount(int userId);
     }
 }
