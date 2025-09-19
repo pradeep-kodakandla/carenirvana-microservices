@@ -11,5 +11,6 @@ namespace CareNirvana.Service.Application.Interfaces
     {
         Task<List<MemberCareStaff>> GetMyCareStaff(int userId);
         Task<DashboardCounts> DashBoardCount(int userId);
+        Task<List<MemberSummary>> GetMemberSummaries(int userId);
     }
 }

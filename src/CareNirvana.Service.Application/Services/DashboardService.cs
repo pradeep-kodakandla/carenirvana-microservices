@@ -17,6 +17,7 @@ namespace CareNirvana.Service.Application.Services
         }
         public Task<List<MemberCareStaff>> GetMyCareStaff(int userId) => _repo.GetMyCareStaff(userId);
         public Task<DashboardCounts> DashBoardCount(int userId) => _repo.DashBoardCount(userId);
+        public Task<List<MemberSummary>> GetMemberSummaries(int userId) => _repo.GetMemberSummaries(userId);
     }
 
 }

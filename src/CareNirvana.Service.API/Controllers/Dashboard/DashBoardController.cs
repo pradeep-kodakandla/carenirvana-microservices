@@ -28,5 +28,12 @@ public class DashBoardController : ControllerBase
             return NotFound(new { message = "No care staff data found for this user." });
         return Ok(result);
     }
-
+    [HttpGet("membersummaries/{userId}")]
+    public async Task<IActionResult> GetMemberSummaries(int userId)
+    {
+        var result = await _dashBoardService.GetMemberSummaries(userId);
+        if (result == null || result.Count == 0)
+            return NotFound(new { message = "No member summaries found for this user." });
+        return Ok(result);
+    }
 }
