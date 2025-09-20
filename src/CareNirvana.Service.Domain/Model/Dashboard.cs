@@ -29,4 +29,29 @@ namespace CareNirvana.Service.Domain.Model
         public int AuthCount { get; set; }           // coalesce -> non-null
         public string? DOB { get; set; }
     }
+
+    public sealed class AuthDetailListItem
+    {
+        public string AuthNumber { get; set; } = "";
+        public int? AuthStatus { get; set; }
+        public string? AuthStatusValue { get; set; }
+        public string? TemplateName { get; set; }
+        public string? AuthClassValue { get; set; }
+
+        public int MemberId { get; set; }
+        public DateTime? NextReviewDate { get; set; }
+        public DateTime? AuthDueDate { get; set; }
+
+        public DateTime CreatedOn { get; set; }
+        public int CreatedBy { get; set; }
+        public string? CreatedUser { get; set; }
+        public DateTime? UpdatedOn { get; set; }
+        public int? UpdatedBy { get; set; }
+
+        // Header-level (from Auth Details -> entries[0])
+        public string? TreatmentType { get; set; }          // raw id/text from JSON (e.g., "3")
+        public string? TreatmentTypeValue { get; set; }     // display value from cfgadmindata
+        public string? AuthPriority { get; set; }           // raw id/text from JSON (e.g., "1")
+        public string? RequestPriorityValue { get; set; }   // display value from cfgadmindata
+    }
 }

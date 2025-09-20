@@ -184,5 +184,128 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
             return results;
         }
+
+        public async Task<List<AuthDetailListItem>> GetAuthDetailListAsync(int userId)
+        {
+            const string sql = @"
+                    SELECT
+                      ad.authnumber,
+                      ad.authstatus,
+                      rl.authstatusvalue,
+                      at.templatename,
+                      ac.authclassvalue,
+                      ad.memberid,
+                      ad.nextreviewdate,
+                      ad.authduedate,
+                      ad.createdon,
+                      ad.createdby,
+                      su.username AS createduser,
+                      ad.updatedon,
+                      ad.updatedby,
+                      -- from Auth Details (header-level)
+                      ah.treatmenttype_hdr  AS treatmenttype,
+                      tt.treatmentTypeValue,
+                      ah.authpriority_hdr   AS authpriority,
+                      rp.requestPriorityValue
+                    FROM public.authdetail ad
+
+                    -- normalize JSON root (array[0] vs object)
+                    LEFT JOIN LATERAL (
+                      SELECT CASE
+                               WHEN jsonb_typeof(ad.data::jsonb) = 'array' THEN ad.data::jsonb -> 0
+                               ELSE ad.data::jsonb
+                             END AS root
+                    ) j ON TRUE
+
+                    -- header-level fields (Auth Details -> entries[0])
+                    LEFT JOIN LATERAL (
+                      SELECT
+                        (j.root->'Auth Details'->'entries'->0->>'treatmentType')   AS treatmenttype_hdr,
+                        (j.root->'Auth Details'->'entries'->0->>'requestPriority') AS authpriority_hdr
+                    ) ah ON TRUE
+
+                    -- lookups
+                    LEFT JOIN LATERAL (
+                      SELECT elem->>'authStatus' AS authstatusvalue
+                      FROM cfgadmindata cad,
+                           jsonb_array_elements(cad.jsoncontent::jsonb->'authstatus') elem
+                      WHERE (elem->>'id')::int = ad.authstatus
+                        AND cad.module = 'UM'
+                      LIMIT 1
+                    ) rl ON TRUE
+
+                    LEFT JOIN LATERAL (
+                      SELECT elem->>'authClass' AS authclassvalue
+                      FROM cfgadmindata cad,
+                           jsonb_array_elements(cad.jsoncontent::jsonb->'authclass') elem
+                      WHERE (elem->>'id')::int = ad.authclassid
+                        AND cad.module = 'UM'
+                      LIMIT 1
+                    ) ac ON TRUE
+
+                    LEFT JOIN LATERAL (
+                      SELECT elem->>'requestPriority' AS requestPriorityValue
+                      FROM cfgadmindata cad,
+                           jsonb_array_elements(cad.jsoncontent::jsonb->'requestpriority') elem
+                      WHERE (elem->>'id')::text = ah.authpriority_hdr
+                        AND cad.module = 'UM'
+                      LIMIT 1
+                    ) rp ON TRUE
+
+                    LEFT JOIN LATERAL (
+                      SELECT elem->>'treatmentType' AS treatmentTypeValue
+                      FROM cfgadmindata cad,
+                           jsonb_array_elements(cad.jsoncontent::jsonb->'treatmenttype') elem
+                      WHERE (elem->>'id')::text = ah.treatmenttype_hdr
+                        AND cad.module = 'UM'
+                      LIMIT 1
+                    ) tt ON TRUE
+
+                    LEFT JOIN authtemplate at ON at.id = ad.authtypeid
+                    LEFT JOIN securityuser su ON su.userid = ad.createdby
+                    WHERE ad.deletedby IS NULL and ad.authassignedto = @userId
+                    ORDER BY ad.createdon DESC;";
+
+            var results = new List<AuthDetailListItem>();
+
+            using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+
+            using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@userId", userId);
+
+            using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SequentialAccess);
+
+            while (await reader.ReadAsync())
+            {
+                var item = new AuthDetailListItem
+                {
+                    AuthNumber = reader["authnumber"]?.ToString() ?? "",
+                    AuthStatus = reader.IsDBNull(reader.GetOrdinal("authstatus")) ? null : reader.GetInt32(reader.GetOrdinal("authstatus")),
+                    AuthStatusValue = reader.IsDBNull(reader.GetOrdinal("authstatusvalue")) ? null : reader.GetString(reader.GetOrdinal("authstatusvalue")),
+                    TemplateName = reader.IsDBNull(reader.GetOrdinal("templatename")) ? null : reader.GetString(reader.GetOrdinal("templatename")),
+                    AuthClassValue = reader.IsDBNull(reader.GetOrdinal("authclassvalue")) ? null : reader.GetString(reader.GetOrdinal("authclassvalue")),
+
+                    MemberId = reader.IsDBNull(reader.GetOrdinal("memberid")) ? 0 : reader.GetInt32(reader.GetOrdinal("memberid")),
+                    NextReviewDate = reader.IsDBNull(reader.GetOrdinal("nextreviewdate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("nextreviewdate")),
+                    AuthDueDate = reader.IsDBNull(reader.GetOrdinal("authduedate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("authduedate")),
+
+                    CreatedOn = reader.GetDateTime(reader.GetOrdinal("createdon")),
+                    CreatedBy = reader.IsDBNull(reader.GetOrdinal("createdby")) ? 0 : reader.GetInt32(reader.GetOrdinal("createdby")),
+                    CreatedUser = reader.IsDBNull(reader.GetOrdinal("createduser")) ? null : reader.GetString(reader.GetOrdinal("createduser")),
+                    UpdatedOn = reader.IsDBNull(reader.GetOrdinal("updatedon")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("updatedon")),
+                    UpdatedBy = reader.IsDBNull(reader.GetOrdinal("updatedby")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("updatedby")),
+
+                    TreatmentType = reader.IsDBNull(reader.GetOrdinal("treatmenttype")) ? null : reader.GetString(reader.GetOrdinal("treatmenttype")),
+                    TreatmentTypeValue = reader.IsDBNull(reader.GetOrdinal("treatmentTypeValue")) ? null : reader.GetString(reader.GetOrdinal("treatmentTypeValue")),
+                    AuthPriority = reader.IsDBNull(reader.GetOrdinal("authpriority")) ? null : reader.GetString(reader.GetOrdinal("authpriority")),
+                    RequestPriorityValue = reader.IsDBNull(reader.GetOrdinal("requestPriorityValue")) ? null : reader.GetString(reader.GetOrdinal("requestPriorityValue"))
+                };
+
+                results.Add(item);
+            }
+
+            return results;
+        }
     }
 }
