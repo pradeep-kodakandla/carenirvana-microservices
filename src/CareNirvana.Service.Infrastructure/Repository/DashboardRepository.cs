@@ -206,7 +206,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                       ah.treatmenttype_hdr  AS treatmenttype,
                       tt.treatmentTypeValue,
                       ah.authpriority_hdr   AS authpriority,
-                      rp.requestPriorityValue
+                      rp.requestPriorityValue,
+                      concat(md.firstname, ' ', md.lastname) AS membername
                     FROM public.authdetail ad
 
                     -- normalize JSON root (array[0] vs object)
@@ -263,6 +264,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
                     LEFT JOIN authtemplate at ON at.id = ad.authtypeid
                     LEFT JOIN securityuser su ON su.userid = ad.createdby
+                    LEFT JOIN memberdetails md on md.memberid = ad.memberid
                     WHERE ad.deletedby IS NULL and ad.authassignedto = @userId
                     ORDER BY ad.createdon DESC;";
 
@@ -299,7 +301,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     TreatmentType = reader.IsDBNull(reader.GetOrdinal("treatmenttype")) ? null : reader.GetString(reader.GetOrdinal("treatmenttype")),
                     TreatmentTypeValue = reader.IsDBNull(reader.GetOrdinal("treatmentTypeValue")) ? null : reader.GetString(reader.GetOrdinal("treatmentTypeValue")),
                     AuthPriority = reader.IsDBNull(reader.GetOrdinal("authpriority")) ? null : reader.GetString(reader.GetOrdinal("authpriority")),
-                    RequestPriorityValue = reader.IsDBNull(reader.GetOrdinal("requestPriorityValue")) ? null : reader.GetString(reader.GetOrdinal("requestPriorityValue"))
+                    RequestPriorityValue = reader.IsDBNull(reader.GetOrdinal("requestPriorityValue")) ? null : reader.GetString(reader.GetOrdinal("requestPriorityValue")),
+                    MemberName = reader.IsDBNull(reader.GetOrdinal("membername")) ? null : reader.GetString(reader.GetOrdinal("membername"))
                 };
 
                 results.Add(item);

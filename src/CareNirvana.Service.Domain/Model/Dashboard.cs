@@ -53,5 +53,6 @@ namespace CareNirvana.Service.Domain.Model
         public string? TreatmentTypeValue { get; set; }     // display value from cfgadmindata
         public string? AuthPriority { get; set; }           // raw id/text from JSON (e.g., "1")
         public string? RequestPriorityValue { get; set; }   // display value from cfgadmindata
+        public string? MemberName { get; set; }
     }
 }
