@@ -28,6 +28,8 @@ namespace CareNirvana.Service.Domain.Model
         public string? LevelMap { get; set; }        // JSON string
         public int AuthCount { get; set; }           // coalesce -> non-null
         public string? DOB { get; set; }
+        public DateTime? StartDate { get; set; }
+        public DateTime? EndDate { get; set; }
     }
 
     public sealed class AuthDetailListItem
@@ -54,5 +56,29 @@ namespace CareNirvana.Service.Domain.Model
         public string? AuthPriority { get; set; }           // raw id/text from JSON (e.g., "1")
         public string? RequestPriorityValue { get; set; }   // display value from cfgadmindata
         public string? MemberName { get; set; }
+    }
+
+    public class AuthActivityItem
+    {
+        public string Module { get; set; }                 // 'UM'
+        public string FirstName { get; set; }
+        public string LastName { get; set; }
+        public int? MemberId { get; set; }
+
+        public DateTime? CreatedOn { get; set; }
+
+        public int? ActivityTypeId { get; set; }
+        public string ActivityType { get; set; }
+
+        public int? ReferredTo { get; set; }
+        public string UserName { get; set; }
+
+        public DateTime? FollowUpDateTime { get; set; }
+        public DateTime? DueDate { get; set; }
+
+        public int? StatusId { get; set; }
+        public string Status { get; set; }                 // 'Pending'
+        public string? Comments { get; set; }
+        public string? AuthNumber { get; set; }
     }
 }

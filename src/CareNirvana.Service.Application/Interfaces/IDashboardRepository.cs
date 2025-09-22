@@ -13,6 +13,7 @@ namespace CareNirvana.Service.Application.Interfaces
         Task<DashboardCounts> DashBoardCount(int userId);
         Task<List<MemberSummary>> GetMemberSummaries(int userId);
         Task<List<AuthDetailListItem>> GetAuthDetailListAsync(int userId);
-
+        Task<List<AuthActivityItem>> GetPendingAuthActivitiesAsync(int? userId = null);
+        Task<List<AuthActivityItem>> GetPendingWQAsync(int? userId = null);
     }
 }

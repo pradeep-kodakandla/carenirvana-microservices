@@ -44,4 +44,20 @@ public class DashBoardController : ControllerBase
             return NotFound(new { message = "No authorization details found for this user." });
         return Ok(result);
     }
+    [HttpGet("pendingauthactivities/{userId?}")]
+    public async Task<IActionResult> GetPendingAuthActivitiesAsync(int? userId = null)
+    {
+        var result = await _dashBoardService.GetPendingAuthActivitiesAsync(userId);
+        if (result == null || result.Count == 0)
+            return NotFound(new { message = "No pending authorization activities found." });
+        return Ok(result);
+    }
+    [HttpGet("pendingwq/{userId?}")]
+    public async Task<IActionResult> GetPendingWQAsync(int? userId = null)
+    {
+        var result = await _dashBoardService.GetPendingWQAsync(userId);
+        if (result == null || result.Count == 0)
+            return NotFound(new { message = "No pending work queue items found." });
+        return Ok(result);
+    }
 }

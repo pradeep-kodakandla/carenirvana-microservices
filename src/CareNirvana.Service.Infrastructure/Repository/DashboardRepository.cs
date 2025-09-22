@@ -73,7 +73,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
             SELECT
                 (SELECT COUNT(*) FROM public.membercarestaff  m  WHERE m.userid = @userId AND COALESCE(m.activeflag, true) = true) AS mymembercount,
                 (SELECT COUNT(*) FROM public.authdetail       a WHERE a.authassignedto = @userId) AS authcount,
-                (SELECT COUNT(*) FROM public.authactivity      aa WHERE aa.referredto = @userId) AS activitycount
+                (SELECT COUNT(*) FROM public.authactivity      aa WHERE aa.referredto = @userId and aa.service_line_count=0) AS activitycount,
+                (SELECT COUNT(*) FROM public.authactivity      aa WHERE aa.referredto = @userId and aa.service_line_count<>0) AS wqcount
             ;";
 
             using var cmd = new NpgsqlCommand(sql, connection);
@@ -91,7 +92,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     RequestCount = 0,
                     ComplaintCount = 0,
                     FaxCount = 0,
-                    WQCount = 0
+                    WQCount = reader.GetInt32(reader.GetOrdinal("wqcount"))
                 };
             }
 
@@ -116,6 +117,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                         ma.city,
                                         mp.memberphonenumberid,
                                         hie.level_map,
+	                                    mc.startdate,
+	                                    mc.enddate,
                                         coalesce(ac.authcount, 0) as authcount
                                     from membercarestaff mc
                                     join memberdetails md
@@ -176,7 +179,10 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     City = reader.IsDBNull(reader.GetOrdinal("city")) ? null : reader.GetString(reader.GetOrdinal("city")),
                     MemberPhoneNumberId = reader.IsDBNull(reader.GetOrdinal("memberphonenumberid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("memberphonenumberid")),
                     LevelMap = reader.IsDBNull(reader.GetOrdinal("level_map")) ? null : reader.GetString(reader.GetOrdinal("level_map")),
+                    StartDate = reader.IsDBNull(reader.GetOrdinal("startdate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("startdate")),
+                    EndDate = reader.IsDBNull(reader.GetOrdinal("enddate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("enddate")),
                     AuthCount = reader.GetInt32(reader.GetOrdinal("authcount"))
+
                 };
 
                 results.Add(o);
@@ -310,5 +316,159 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
             return results;
         }
+
+        public async Task<List<AuthActivityItem>> GetPendingAuthActivitiesAsync(int? userId = null)
+        {
+            const string sql = @"
+                select distinct
+                    'UM' as module,
+                    md.firstname,
+                    md.lastname,
+                    md.memberid,
+                    aa.createdon,
+                    aa.activitytypeid,
+                    at.activitytype,
+                    aa.referredto,
+                    su.username,
+                    aa.followupdatetime,
+                    aa.duedate,
+                    aa.statusid,
+                    'Pending' as status
+                from authactivity aa
+                join authdetail ad on ad.authdetailid = aa.authdetailid
+                join memberdetails md on md.memberid = ad.memberid
+                join securityuser su on su.userid = aa.referredto
+                left join lateral (
+                    select elem->>'activityType' as activitytype
+                    from cfgadmindata cad,
+                         jsonb_array_elements(cad.jsoncontent::jsonb->'activitytype') elem
+                    where (elem->>'id')::int = aa.activitytypeid
+                      and cad.module = 'UM'
+                    limit 1
+                ) at on true
+                where aa.service_line_count = 0
+                  and (@userId is null or aa.referredto = @userId)
+                order by aa.createdon desc;";
+
+            var results = new List<AuthActivityItem>();
+
+            using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+
+            using var cmd = new NpgsqlCommand(sql, conn);
+            if (userId.HasValue) cmd.Parameters.AddWithValue("@userId", userId.Value);
+            else cmd.Parameters.AddWithValue("@userId", DBNull.Value);
+
+            using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SequentialAccess);
+
+            while (await reader.ReadAsync())
+            {
+                var item = new AuthActivityItem
+                {
+                    Module = reader.IsDBNull(reader.GetOrdinal("module")) ? null : reader.GetString(reader.GetOrdinal("module")),
+                    FirstName = reader.IsDBNull(reader.GetOrdinal("firstname")) ? null : reader.GetString(reader.GetOrdinal("firstname")),
+                    LastName = reader.IsDBNull(reader.GetOrdinal("lastname")) ? null : reader.GetString(reader.GetOrdinal("lastname")),
+                    MemberId = reader.IsDBNull(reader.GetOrdinal("memberid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("memberid")),
+
+                    CreatedOn = reader.IsDBNull(reader.GetOrdinal("createdon")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("createdon")),
+
+                    ActivityTypeId = reader.IsDBNull(reader.GetOrdinal("activitytypeid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("activitytypeid")),
+                    ActivityType = reader.IsDBNull(reader.GetOrdinal("activitytype")) ? null : reader.GetString(reader.GetOrdinal("activitytype")),
+
+                    ReferredTo = reader.IsDBNull(reader.GetOrdinal("referredto")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("referredto")),
+                    UserName = reader.IsDBNull(reader.GetOrdinal("username")) ? null : reader.GetString(reader.GetOrdinal("username")),
+
+                    FollowUpDateTime = reader.IsDBNull(reader.GetOrdinal("followupdatetime")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("followupdatetime")),
+                    DueDate = reader.IsDBNull(reader.GetOrdinal("duedate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("duedate")),
+
+                    StatusId = reader.IsDBNull(reader.GetOrdinal("statusid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("statusid")),
+                    Status = reader.IsDBNull(reader.GetOrdinal("status")) ? null : reader.GetString(reader.GetOrdinal("status"))
+                };
+
+                results.Add(item);
+            }
+
+            return results;
+        }
+
+        public async Task<List<AuthActivityItem>> GetPendingWQAsync(int? userId = null)
+        {
+            const string sql = @"
+                select distinct
+                    'UM' as module,
+                    md.firstname,
+                    md.lastname,
+                    md.memberid,
+                    aa.createdon,
+                    aa.activitytypeid,
+                    at.activitytype,
+                    aa.referredto,
+                    su.username,
+                    aa.followupdatetime,
+                    aa.duedate,
+                    aa.statusid,
+                    'Pending' as status,
+                    ad.authnumber,
+                    aa.comment
+                from authactivity aa
+                join authdetail ad on ad.authdetailid = aa.authdetailid
+                join memberdetails md on md.memberid = ad.memberid
+                join securityuser su on su.userid = aa.referredto
+                left join lateral (
+                    select elem->>'activityType' as activitytype
+                    from cfgadmindata cad,
+                         jsonb_array_elements(cad.jsoncontent::jsonb->'activitytype') elem
+                    where (elem->>'id')::int = aa.activitytypeid
+                      and cad.module = 'UM'
+                    limit 1
+                ) at on true
+                where aa.service_line_count <> 0
+                  and (@userId is null or aa.referredto = @userId)
+                order by aa.createdon desc;";
+
+            var results = new List<AuthActivityItem>();
+
+            using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+
+            using var cmd = new NpgsqlCommand(sql, conn);
+            if (userId.HasValue) cmd.Parameters.AddWithValue("@userId", userId.Value);
+            else cmd.Parameters.AddWithValue("@userId", DBNull.Value);
+
+            using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SequentialAccess);
+
+            while (await reader.ReadAsync())
+            {
+                var item = new AuthActivityItem
+                {
+                    Module = reader.IsDBNull(reader.GetOrdinal("module")) ? null : reader.GetString(reader.GetOrdinal("module")),
+                    FirstName = reader.IsDBNull(reader.GetOrdinal("firstname")) ? null : reader.GetString(reader.GetOrdinal("firstname")),
+                    LastName = reader.IsDBNull(reader.GetOrdinal("lastname")) ? null : reader.GetString(reader.GetOrdinal("lastname")),
+                    MemberId = reader.IsDBNull(reader.GetOrdinal("memberid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("memberid")),
+
+                    CreatedOn = reader.IsDBNull(reader.GetOrdinal("createdon")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("createdon")),
+
+                    ActivityTypeId = reader.IsDBNull(reader.GetOrdinal("activitytypeid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("activitytypeid")),
+                    ActivityType = reader.IsDBNull(reader.GetOrdinal("activitytype")) ? null : reader.GetString(reader.GetOrdinal("activitytype")),
+
+                    ReferredTo = reader.IsDBNull(reader.GetOrdinal("referredto")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("referredto")),
+                    UserName = reader.IsDBNull(reader.GetOrdinal("username")) ? null : reader.GetString(reader.GetOrdinal("username")),
+
+                    FollowUpDateTime = reader.IsDBNull(reader.GetOrdinal("followupdatetime")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("followupdatetime")),
+                    DueDate = reader.IsDBNull(reader.GetOrdinal("duedate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("duedate")),
+
+                    StatusId = reader.IsDBNull(reader.GetOrdinal("statusid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("statusid")),
+                    Status = reader.IsDBNull(reader.GetOrdinal("status")) ? null : reader.GetString(reader.GetOrdinal("status")),
+                    AuthNumber = reader.IsDBNull(reader.GetOrdinal("authnumber")) ? null : reader.GetString(reader.GetOrdinal("authnumber")),
+                    Comments = reader.IsDBNull(reader.GetOrdinal("comment")) ? null : reader.GetString(reader.GetOrdinal("comment"))
+                };
+
+                results.Add(item);
+            }
+
+            return results;
+        }
+
     }
+
 }
