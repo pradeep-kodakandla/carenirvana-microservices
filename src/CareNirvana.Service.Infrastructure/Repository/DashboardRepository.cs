@@ -3,6 +3,7 @@ using CareNirvana.Service.Domain.Model;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using System.Data;
+using System.Net.NetworkInformation;
 
 namespace CareNirvana.Service.Infrastructure.Repository
 {
@@ -409,7 +410,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     aa.statusid,
                     'Pending' as status,
                     ad.authnumber,
-                    aa.comment
+                    aa.comment,
+                    aa.authactivityid
                 from authactivity aa
                 join authdetail ad on ad.authdetailid = aa.authdetailid
                 join memberdetails md on md.memberid = ad.memberid
@@ -460,8 +462,62 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     StatusId = reader.IsDBNull(reader.GetOrdinal("statusid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("statusid")),
                     Status = reader.IsDBNull(reader.GetOrdinal("status")) ? null : reader.GetString(reader.GetOrdinal("status")),
                     AuthNumber = reader.IsDBNull(reader.GetOrdinal("authnumber")) ? null : reader.GetString(reader.GetOrdinal("authnumber")),
-                    Comments = reader.IsDBNull(reader.GetOrdinal("comment")) ? null : reader.GetString(reader.GetOrdinal("comment"))
+                    Comments = reader.IsDBNull(reader.GetOrdinal("comment")) ? null : reader.GetString(reader.GetOrdinal("comment")),
+                    AuthActivityId = reader.IsDBNull(reader.GetOrdinal("authactivityid")) ? null : reader.GetInt32(reader.GetOrdinal("authactivityid")).ToString()
                 };
+
+                results.Add(item);
+            }
+
+            return results;
+        }
+
+        public async Task<List<AuthActivityLine>> GetWQActivityLines(int? activityid = null)
+        {
+            const string sql = @"
+                select
+                id, activityid, decisionlineid, servicecode, description,
+                fromdate, todate, requested, approved, denied,
+                initialrecommendation, status, mddecision, mdnotes,
+                reviewedbyuserid, reviewedon, updatedon, version
+                from authactivityline
+                where activityid = @activityid
+                order by fromdate nulls first, id;";
+
+            var results = new List<AuthActivityLine>();
+
+            using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+
+            using var cmd = new NpgsqlCommand(sql, conn);
+            if (activityid.HasValue) cmd.Parameters.AddWithValue("@activityid", activityid.Value);
+            else cmd.Parameters.AddWithValue("@activityid", DBNull.Value);
+
+            using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SequentialAccess);
+
+            while (await reader.ReadAsync())
+            {
+                var item = new AuthActivityLine
+                {
+                    Id = reader.IsDBNull(reader.GetOrdinal("id")) ? 0 : reader.GetInt32(reader.GetOrdinal("id")),
+                    ActivityId = reader.IsDBNull(reader.GetOrdinal("activityid")) ? 0 : reader.GetInt32(reader.GetOrdinal("activityid")),
+                    DecisionLineId = reader.IsDBNull(reader.GetOrdinal("decisionlineid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("decisionlineid")),
+                    ServiceCode = reader.IsDBNull(reader.GetOrdinal("servicecode")) ? string.Empty : reader.GetString(reader.GetOrdinal("servicecode")),
+                    Description = reader.IsDBNull(reader.GetOrdinal("description")) ? string.Empty : reader.GetString(reader.GetOrdinal("description")),
+                    FromDate = reader.IsDBNull(reader.GetOrdinal("fromdate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("fromdate")),
+                    ToDate = reader.IsDBNull(reader.GetOrdinal("todate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("todate")),
+                    Requested = reader.IsDBNull(reader.GetOrdinal("requested")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("requested")),
+                    Approved = reader.IsDBNull(reader.GetOrdinal("approved")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("approved")),
+                    Denied = reader.IsDBNull(reader.GetOrdinal("denied")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("denied")),
+                    InitialRecommendation = reader.IsDBNull(reader.GetOrdinal("initialrecommendation")) ? null : reader.GetString(reader.GetOrdinal("initialrecommendation")),
+                    Status = reader.IsDBNull(reader.GetOrdinal("status")) ? string.Empty : reader.GetString(reader.GetOrdinal("status")),
+                    MdDecision = reader.IsDBNull(reader.GetOrdinal("mddecision")) ? string.Empty : reader.GetString(reader.GetOrdinal("mddecision")),
+                    MdNotes = reader.IsDBNull(reader.GetOrdinal("mdnotes")) ? null : reader.GetString(reader.GetOrdinal("mdnotes")),
+                    ReviewedByUserId = reader.IsDBNull(reader.GetOrdinal("reviewedbyuserid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("reviewedbyuserid")),
+                    ReviewedOn = reader.IsDBNull(reader.GetOrdinal("reviewedon")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("reviewedon")),
+                    UpdatedOn = reader.IsDBNull(reader.GetOrdinal("updatedon")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("updatedon")),
+                    Version = reader.IsDBNull(reader.GetOrdinal("version")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("version")),
+                }; 
 
                 results.Add(item);
             }

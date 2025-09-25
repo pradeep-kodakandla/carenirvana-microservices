@@ -60,4 +60,12 @@ public class DashBoardController : ControllerBase
             return NotFound(new { message = "No pending work queue items found." });
         return Ok(result);
     }
+    [HttpGet("wqactivitylines/{activityid?}")]
+    public async Task<IActionResult> GetWQActivityLines(int? activityid = null)
+    {
+        var result = await _dashBoardService.GetWQActivityLines(activityid);
+        if (result == null || result.Count == 0)
+            return NotFound(new { message = "No work queue activity lines found." });
+        return Ok(result);
+    }
 }

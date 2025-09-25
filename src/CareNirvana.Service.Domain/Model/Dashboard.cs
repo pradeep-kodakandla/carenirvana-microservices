@@ -80,5 +80,34 @@ namespace CareNirvana.Service.Domain.Model
         public string Status { get; set; }                 // 'Pending'
         public string? Comments { get; set; }
         public string? AuthNumber { get; set; }
+        public string? AuthActivityId { get; set; }
     }
+
+    public class AuthActivityLine
+    {
+        public int Id { get; set; }
+        public int ActivityId { get; set; }                     // FK -> AuthActivity.AuthActivityId
+        public int? DecisionLineId { get; set; }                // nullable
+        public string ServiceCode { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+
+        public DateTime? FromDate { get; set; }
+        public DateTime? ToDate { get; set; }
+
+        public int? Requested { get; set; }
+        public int? Approved { get; set; }
+        public int? Denied { get; set; }
+
+        public string? InitialRecommendation { get; set; }      // e.g., "Approved/Denied/Partial" or empty
+        public string Status { get; set; } = string.Empty;       // e.g., "Pending"
+        public string MdDecision { get; set; } = string.Empty;   // e.g., "NotReviewed/Approved/Denied"
+        public string? MdNotes { get; set; }
+
+        public int? ReviewedByUserId { get; set; }
+        public DateTime? ReviewedOn { get; set; }
+
+        public DateTime? UpdatedOn { get; set; }
+        public int? Version { get; set; }
+    }
+
 }

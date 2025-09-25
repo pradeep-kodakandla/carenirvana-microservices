@@ -15,5 +15,6 @@ namespace CareNirvana.Service.Application.Interfaces
         Task<List<AuthDetailListItem>> GetAuthDetailListAsync(int userId);
         Task<List<AuthActivityItem>> GetPendingAuthActivitiesAsync(int? userId = null);
         Task<List<AuthActivityItem>> GetPendingWQAsync(int? userId = null);
+        Task<List<AuthActivityLine>> GetWQActivityLines(int? activityid = null);
     }
 }
