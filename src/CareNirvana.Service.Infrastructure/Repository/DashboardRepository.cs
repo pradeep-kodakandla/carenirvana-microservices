@@ -525,6 +525,39 @@ namespace CareNirvana.Service.Infrastructure.Repository
             return results;
         }
 
+        public async Task<int> UpdateAuthActivityLinesAsync(
+            IEnumerable<int> lineIds,
+            string status,
+            string mdDecision,
+            string mdNotes,
+            int reviewedByUserId)
+        {
+            if (lineIds == null || !lineIds.Any())
+                return 0;
+
+            using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+
+            const string sql = @"
+                UPDATE authactivityline
+                SET status = @status,
+                    mddecision = @mdDecision,
+                    mdnotes = @mdNotes,
+                    reviewedbyuserid = @reviewedByUserId,
+                    reviewedon = NOW(),
+                    updatedon = NOW()
+                WHERE id = ANY(@ids);";
+
+            using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@status", status ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@mdDecision", mdDecision ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@mdNotes", mdNotes ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@reviewedByUserId", reviewedByUserId);
+            cmd.Parameters.AddWithValue("@ids", lineIds.ToArray());
+
+            return await cmd.ExecuteNonQueryAsync();
+        }
+
     }
 
 }

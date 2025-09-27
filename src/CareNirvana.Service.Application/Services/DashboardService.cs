@@ -22,6 +22,7 @@ namespace CareNirvana.Service.Application.Services
         public Task<List<AuthActivityItem>> GetPendingAuthActivitiesAsync(int? userId = null) => _repo.GetPendingAuthActivitiesAsync(userId);
         public Task<List<AuthActivityItem>> GetPendingWQAsync(int? userId = null) => _repo.GetPendingWQAsync(userId);
         public Task<List<AuthActivityLine>> GetWQActivityLines(int? activityid = null) => _repo.GetWQActivityLines(activityid);
+        public Task<int> UpdateAuthActivityLinesAsync(IEnumerable<int> lineIds, string status, string mdDecision, string mdNotes, int reviewedByUserId) => _repo.UpdateAuthActivityLinesAsync(lineIds, status, mdDecision, mdNotes, reviewedByUserId);
     }
 
 }

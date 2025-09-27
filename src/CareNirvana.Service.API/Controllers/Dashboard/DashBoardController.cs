@@ -68,4 +68,21 @@ public class DashBoardController : ControllerBase
             return NotFound(new { message = "No work queue activity lines found." });
         return Ok(result);
     }
+    [HttpPost("updateactivitylines")]
+    public async Task<IActionResult> UpdateAuthActivityLinesAsync([FromBody] UpdateActivityLinesRequest request)
+    {
+        if (request.LineIds == null || !request.LineIds.Any())
+            return BadRequest(new { message = "LineIds cannot be null or empty." });
+        var updatedCount = await _dashBoardService.UpdateAuthActivityLinesAsync(request.LineIds, request.Status, request.MDDecision, request.MDNotes, request.ReviewedByUserId);
+        return Ok(new { updatedCount });
+    }
+
+    public class UpdateActivityLinesRequest
+    {
+        public List<int> LineIds { get; set; } = new List<int>();
+        public string Status { get; set; } = string.Empty;
+        public string MDDecision { get; set; } = string.Empty;
+        public string MDNotes { get; set; } = string.Empty;
+        public int ReviewedByUserId { get; set; }
+    }
 }
