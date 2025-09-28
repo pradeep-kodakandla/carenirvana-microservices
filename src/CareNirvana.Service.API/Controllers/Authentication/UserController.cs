@@ -53,7 +53,8 @@ public class UserController : ControllerBase
         {
             Token = tokenString,
             UserName = user.UserName,
-            Message = "Login successful!"
+            Message = "Login successful!",
+            UserId = user.UserId   
         };
 
         return Ok(response); // Simplified return, CORS middleware will handle headers
