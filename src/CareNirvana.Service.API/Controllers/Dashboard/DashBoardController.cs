@@ -1,4 +1,5 @@
 ﻿using CareNirvana.Service.Application.Interfaces;
+using CareNirvana.Service.Domain.Model;
 using Microsoft.AspNetCore.Mvc;
 
 [Route("api/[controller]")]
@@ -84,5 +85,51 @@ public class DashBoardController : ControllerBase
         public string MDDecision { get; set; } = string.Empty;
         public string MDNotes { get; set; } = string.Empty;
         public int ReviewedByUserId { get; set; }
+    }
+
+    [HttpPost("insertfaxfile")]
+    public async Task<IActionResult> InsertFaxFileAsync([FromBody] FaxFile fax)
+    {
+        if (fax == null)
+            return BadRequest(new { message = "Fax file data cannot be null." });
+        var newId = await _dashBoardService.InsertFaxFileAsync(fax);
+        return Ok(new { newId });
+    }
+
+    [HttpPost("updatefaxfile")]
+    public async Task<IActionResult> UpdateFaxFileAsync([FromBody] FaxFile fax)
+    {
+        if (fax == null || fax.FaxId == 0)
+            return BadRequest(new { message = "Invalid fax file data." });
+        var updatedRows = await _dashBoardService.UpdateFaxFileAsync(fax);
+        return Ok(new { updatedRows });
+    }
+    [HttpGet("faxfiles")]
+    public async Task<IActionResult> GetFaxFilesAsync([FromQuery] string? search, [FromQuery] int page = 1, [FromQuery] int pageSize = 10, [FromQuery] string? status = null)
+    {
+        if (page <= 0 || pageSize <= 0)
+            return BadRequest(new { message = "Page and PageSize must be greater than zero." });
+        var (items, total) = await _dashBoardService.GetFaxFilesAsync(search, page, pageSize, status);
+        if (items == null || items.Count == 0)
+            return NotFound(new { message = "No fax files found." });
+        var response = new
+        {
+            Items = items,
+            Total = total,
+            Page = page,
+            PageSize = pageSize,
+            TotalPages = (int)Math.Ceiling((double)total / pageSize)
+        };
+        return Ok(response);
+    }
+    [HttpGet("faxfile/{faxId}")]
+    public async Task<IActionResult> GetFaxFileByIdAsync(long faxId)
+    {
+        if (faxId <= 0)
+            return BadRequest(new { message = "Invalid FaxId." });
+        var fax = await _dashBoardService.GetFaxFileByIdAsync(faxId);
+        if (fax == null)
+            return NotFound(new { message = "Fax file not found." });
+        return Ok(fax);
     }
 }

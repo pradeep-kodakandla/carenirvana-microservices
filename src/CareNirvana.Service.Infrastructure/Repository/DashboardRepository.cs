@@ -2,8 +2,11 @@
 using CareNirvana.Service.Domain.Model;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
+using NpgsqlTypes;
+using System.Collections.Generic;
 using System.Data;
 using System.Net.NetworkInformation;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace CareNirvana.Service.Infrastructure.Repository
 {
@@ -517,7 +520,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     ReviewedOn = reader.IsDBNull(reader.GetOrdinal("reviewedon")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("reviewedon")),
                     UpdatedOn = reader.IsDBNull(reader.GetOrdinal("updatedon")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("updatedon")),
                     Version = reader.IsDBNull(reader.GetOrdinal("version")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("version")),
-                }; 
+                };
 
                 results.Add(item);
             }
@@ -558,6 +561,262 @@ namespace CareNirvana.Service.Infrastructure.Repository
             return await cmd.ExecuteNonQueryAsync();
         }
 
+        public async Task<long> InsertFaxFileAsync(FaxFile fax)
+        {
+            using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+
+            Console.WriteLine($"Inserting fax file record... FileBytes length = {fax.FileBytes?.Length ?? 0}");
+            Console.WriteLine($"Inserting fax file data... {System.Text.Json.JsonSerializer.Serialize(fax)}");
+
+            const string sql = @"
+        INSERT INTO faxfiles
+        (
+            filename, storedpath, originalname, contenttype, sizebytes, sha256hex,
+            receivedat, uploadedby, uploadedat,
+            pagecount, memberid, workbasket, priority, status, processstatus,
+            meta, ocrtext, ocrjsonpath, filebytes,
+            createdon, createdby, updatedon, updatedby
+        )
+        VALUES
+        (
+            @filename, @storedpath, @originalname, @contenttype, @sizebytes, @sha256hex,
+            @receivedat, @uploadedby, @uploadedat,
+            @pagecount, @memberid, @workbasket, @priority, @status, @processstatus,
+            @meta, @ocrtext, @ocrjsonpath, @filebytes,
+            @createdon, @createdby, @updatedon, @updatedby
+        )
+        RETURNING faxid;";
+
+            using var cmd = new NpgsqlCommand(sql, conn);
+
+            cmd.Parameters.AddWithValue("@filename", fax.FileName ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@storedpath", fax.Url ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@originalname", (object?)fax.OriginalName ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@contenttype", (object?)fax.ContentType ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@sizebytes", (object?)fax.SizeBytes ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@sha256hex", (object?)fax.Sha256Hex ?? DBNull.Value);
+
+            cmd.Parameters.AddWithValue("@receivedat", fax.ReceivedAt);
+            cmd.Parameters.AddWithValue("@uploadedby", (object?)fax.UploadedBy ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@uploadedat", (object?)fax.UploadedAt ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@filebytes", (object?)fax.FileBytes ?? DBNull.Value);
+
+            cmd.Parameters.AddWithValue("@pagecount", fax.PageCount);
+            cmd.Parameters.AddWithValue("@memberid", (object?)fax.MemberId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@workbasket", (object?)fax.WorkBasket ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@priority", fax.Priority);
+            cmd.Parameters.AddWithValue("@status", fax.Status ?? "New");
+            cmd.Parameters.AddWithValue("@processstatus", fax.ProcessStatus ?? "Pending");
+
+            // meta jsonb
+            if (string.IsNullOrWhiteSpace(fax.MetaJson))
+                cmd.Parameters.AddWithValue("@meta", NpgsqlDbType.Jsonb, DBNull.Value);
+            else
+                cmd.Parameters.AddWithValue("@meta", NpgsqlDbType.Jsonb, fax.MetaJson);
+
+            cmd.Parameters.AddWithValue("@ocrtext", (object?)fax.OcrText ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@ocrjsonpath", (object?)fax.OcrJsonPath ?? DBNull.Value);
+
+            cmd.Parameters.AddWithValue("@createdon", fax.CreatedOn);
+            cmd.Parameters.AddWithValue("@createdby", (object?)fax.CreatedBy ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@updatedon", (object?)fax.UpdatedOn ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@updatedby", (object?)fax.UpdatedBy ?? DBNull.Value);
+
+            var result = await cmd.ExecuteScalarAsync();
+            return (long)result!;
+        }
+
+
+        public async Task<int> UpdateFaxFileAsync(FaxFile fax)
+        {
+            using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+
+            const string sql = @"
+                UPDATE faxfiles
+                SET
+                    filename      = @filename,
+                    storedpath    = @storedpath,
+                    originalname  = @originalname,
+                    contenttype   = @contenttype,
+                    sizebytes     = @sizebytes,
+                    sha256hex     = @sha256hex,
+                    receivedat    = @receivedat,
+                    uploadedby    = @uploadedby,
+                    uploadedat    = @uploadedat,
+                    pagecount     = @pagecount,
+                    memberid      = @memberid,
+                    workbasket    = @workbasket,
+                    priority      = @priority,
+                    status        = @status,
+                    processstatus = @processstatus,
+                    meta          = @meta,
+                    ocrtext       = @ocrtext,
+                    ocrjsonpath   = @ocrjsonpath,
+                    updatedon     = @updatedon,
+                    updatedby     = @updatedby
+                WHERE faxid = @faxid;";
+
+            using var cmd = new NpgsqlCommand(sql, conn);
+
+            cmd.Parameters.AddWithValue("@faxid", fax.FaxId);
+            cmd.Parameters.AddWithValue("@filename", fax.FileName ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@storedpath", fax.Url ?? (object)DBNull.Value);
+            cmd.Parameters.AddWithValue("@originalname", (object?)fax.OriginalName ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@contenttype", (object?)fax.ContentType ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@sizebytes", (object?)fax.SizeBytes ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@sha256hex", (object?)fax.Sha256Hex ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@receivedat", fax.ReceivedAt);
+            cmd.Parameters.AddWithValue("@uploadedby", (object?)fax.UploadedBy ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@uploadedat", (object?)fax.UploadedAt ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@pagecount", fax.PageCount);
+            cmd.Parameters.AddWithValue("@memberid", (object?)fax.MemberId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@workbasket", (object?)fax.WorkBasket ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@priority", fax.Priority);
+            cmd.Parameters.AddWithValue("@status", fax.Status ?? "New");
+            cmd.Parameters.AddWithValue("@processstatus", fax.ProcessStatus ?? "Pending");
+
+            if (string.IsNullOrWhiteSpace(fax.MetaJson))
+                cmd.Parameters.AddWithValue("@meta", NpgsqlDbType.Jsonb, DBNull.Value);
+            else
+                cmd.Parameters.AddWithValue("@meta", NpgsqlDbType.Jsonb, fax.MetaJson);
+
+            cmd.Parameters.AddWithValue("@ocrtext", (object?)fax.OcrText ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@ocrjsonpath", (object?)fax.OcrJsonPath ?? DBNull.Value);
+
+            cmd.Parameters.AddWithValue("@updatedon", fax.UpdatedOn ?? DateTime.UtcNow);
+            cmd.Parameters.AddWithValue("@updatedby", (object?)fax.UpdatedBy ?? DBNull.Value);
+
+            return await cmd.ExecuteNonQueryAsync();
+        }
+
+
+
+        public async Task<(List<FaxFile> Items, int Total)> GetFaxFilesAsync(
+            string? search, int page, int pageSize, string? status)
+        {
+            if (page <= 0) page = 1;
+            if (pageSize <= 0) pageSize = 25;
+
+            var results = new List<FaxFile>();
+            var total = 0;
+
+            const string sql = @"
+                SELECT
+                    f.faxid,
+                    f.filename,
+                    f.storedpath,
+                    f.originalname,
+                    f.contenttype,
+                    f.sizebytes,
+                    f.sha256hex,
+                    f.receivedat,
+                    f.uploadedby,
+                    f.uploadedat,
+                    f.pagecount,
+                    f.memberid,
+                    f.workbasket,
+                    f.priority,
+                    f.status,
+                    f.processstatus,
+                    f.meta,
+                    f.ocrtext,
+                    f.ocrjsonpath,
+                    f.filebytes,
+                    f.createdon,
+                    f.createdby,
+                    f.updatedon,
+                    f.updatedby,
+                    COUNT(*) OVER() AS total_count
+                FROM faxfiles f
+                ORDER BY f.receivedat DESC;";
+
+            using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+            using var cmd = new NpgsqlCommand(sql, conn);
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                if (total == 0 && !reader.IsDBNull(reader.GetOrdinal("total_count")))
+                    total = reader.GetInt32(reader.GetOrdinal("total_count"));
+
+                var f = new FaxFile
+                {
+                    FaxId = reader.GetInt64(reader.GetOrdinal("faxid")),
+                    FileName = reader.GetString(reader.GetOrdinal("filename")),
+                    Url = reader.IsDBNull(reader.GetOrdinal("storedpath")) ? "" : reader.GetString(reader.GetOrdinal("storedpath")),
+                    OriginalName = reader.IsDBNull(reader.GetOrdinal("originalname")) ? null : reader.GetString(reader.GetOrdinal("originalname")),
+                    ContentType = reader.IsDBNull(reader.GetOrdinal("contenttype")) ? null : reader.GetString(reader.GetOrdinal("contenttype")),
+                    SizeBytes = reader.IsDBNull(reader.GetOrdinal("sizebytes")) ? (long?)null : reader.GetInt64(reader.GetOrdinal("sizebytes")),
+                    Sha256Hex = reader.IsDBNull(reader.GetOrdinal("sha256hex")) ? null : reader.GetString(reader.GetOrdinal("sha256hex")),
+                    ReceivedAt = reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("receivedat")),
+                    UploadedBy = reader.IsDBNull(reader.GetOrdinal("uploadedby")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("uploadedby")),
+                    UploadedAt = reader.IsDBNull(reader.GetOrdinal("uploadedat")) ? (DateTimeOffset?)null : reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("uploadedat")),
+                    PageCount = reader.GetInt32(reader.GetOrdinal("pagecount")),
+                    MemberId = reader.IsDBNull(reader.GetOrdinal("memberid")) ? (long?)null : reader.GetInt64(reader.GetOrdinal("memberid")),
+                    WorkBasket = reader.IsDBNull(reader.GetOrdinal("workbasket")) ? null : reader.GetString(reader.GetOrdinal("workbasket")),
+                    Priority = reader.IsDBNull(reader.GetOrdinal("priority")) ? (short)2 : reader.GetInt16(reader.GetOrdinal("priority")),
+                    Status = reader.IsDBNull(reader.GetOrdinal("status")) ? "New" : reader.GetString(reader.GetOrdinal("status")),
+                    ProcessStatus = reader.IsDBNull(reader.GetOrdinal("processstatus")) ? "Pending" : reader.GetString(reader.GetOrdinal("processstatus")),
+                    MetaJson = reader.IsDBNull(reader.GetOrdinal("meta")) ? null : reader.GetString(reader.GetOrdinal("meta")),
+                    OcrText = reader.IsDBNull(reader.GetOrdinal("ocrtext")) ? null : reader.GetString(reader.GetOrdinal("ocrtext")),
+                    //FileBytes = reader.IsDBNull(reader.GetOrdinal("filebytes")) ? Array.Empty<byte>() : (byte[])reader["filebytes"],
+                    FileBytes = reader.IsDBNull(reader.GetOrdinal("filebytes")) ? Array.Empty<byte>() : (byte[])reader["filebytes"],
+                    OcrJsonPath = reader.IsDBNull(reader.GetOrdinal("ocrjsonpath")) ? null : reader.GetString(reader.GetOrdinal("ocrjsonpath")),
+                    CreatedOn = reader.GetDateTime(reader.GetOrdinal("createdon")),
+                    CreatedBy = reader.IsDBNull(reader.GetOrdinal("createdby")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("createdby")),
+                    UpdatedOn = reader.IsDBNull(reader.GetOrdinal("updatedon")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("updatedon")),
+                    UpdatedBy = reader.IsDBNull(reader.GetOrdinal("updatedby")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("updatedby"))
+                };
+
+                results.Add(f);
+            }
+
+            return (results, total);
+        }
+
+        public async Task<FaxFile?> GetFaxFileByIdAsync(long faxId)
+        {
+            const string sql = @"
+                SELECT
+                    faxid, filename, storedpath, originalname, contenttype, sizebytes, sha256hex,
+                    receivedat, uploadedby, uploadedat, pagecount, memberid, workbasket,
+                    priority, status, processstatus, meta, ocrtext, ocrjsonpath, filebytes,
+                    createdon, createdby, updatedon, updatedby
+                FROM faxfiles
+                WHERE faxid = @faxid;";
+
+            using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+
+            using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@faxid", faxId);
+
+            using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SingleRow);
+            if (await reader.ReadAsync())
+            {
+                return new FaxFile
+                {
+                    FaxId = reader.GetInt64(reader.GetOrdinal("faxid")),
+                    FileName = reader.GetString(reader.GetOrdinal("filename")),
+                    Url = reader.IsDBNull(reader.GetOrdinal("storedpath")) ? "" : reader.GetString(reader.GetOrdinal("storedpath")),
+                    ReceivedAt = reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("receivedat")),
+                    PageCount = reader.GetInt32(reader.GetOrdinal("pagecount")),
+                    MemberId = reader.IsDBNull(reader.GetOrdinal("memberid")) ? (long?)null : reader.GetInt64(reader.GetOrdinal("memberid")),
+                    WorkBasket = reader.IsDBNull(reader.GetOrdinal("workbasket")) ? null : reader.GetString(reader.GetOrdinal("workbasket")),
+                    Priority = reader.IsDBNull(reader.GetOrdinal("priority")) ? (short)2 : reader.GetInt16(reader.GetOrdinal("priority")),
+                    Status = reader.IsDBNull(reader.GetOrdinal("status")) ? "New" : reader.GetString(reader.GetOrdinal("status")),
+                    FileBytes = reader.IsDBNull(reader.GetOrdinal("filebytes")) ? Array.Empty<byte>() : (byte[])reader["filebytes"],
+                    CreatedOn = reader.GetDateTime(reader.GetOrdinal("createdon")),
+                    CreatedBy = reader.IsDBNull(reader.GetOrdinal("createdby")) ? 0 : reader.GetInt32(reader.GetOrdinal("createdby")),
+                    UpdatedOn = reader.IsDBNull(reader.GetOrdinal("updatedon")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("updatedon")),
+                    UpdatedBy = reader.IsDBNull(reader.GetOrdinal("updatedby")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("updatedby"))
+                };
+            }
+
+            return null;
+        }
     }
 
 }

@@ -110,4 +110,39 @@ namespace CareNirvana.Service.Domain.Model
         public int? Version { get; set; }
     }
 
+    public class FaxFile
+    {
+        public long FaxId { get; set; }
+        public string FileName { get; set; } = "";   // DB: filename
+        public string Url { get; set; } = "";   // DB: storedpath
+
+        // New metadata
+        public string? OriginalName { get; set; }
+        public string? ContentType { get; set; }
+        public long? SizeBytes { get; set; }
+        public string? Sha256Hex { get; set; }
+        public int? UploadedBy { get; set; }
+        public DateTimeOffset? UploadedAt { get; set; }
+
+        public DateTimeOffset ReceivedAt { get; set; }
+        public int PageCount { get; set; } = 1;
+        public long? MemberId { get; set; }
+        public string? WorkBasket { get; set; }
+        public short Priority { get; set; } = 2;    // 1=High,2=Normal,3=Low
+        public string Status { get; set; } = "New";
+
+        // Processing & OCR
+        public string ProcessStatus { get; set; } = "Pending"; // Pending|Processing|Ready|Failed
+        public string? OcrText { get; set; }
+        public string? OcrJsonPath { get; set; }
+
+        // JSONB meta (store as raw JSON string; keep it flexible)
+        public string? MetaJson { get; set; }
+        public byte[] FileBytes { get; set; } = Array.Empty<byte>();
+        public int? CreatedBy { get; set; }
+        public DateTime CreatedOn { get; set; }
+        public DateTime? UpdatedOn { get; set; }
+        public int? UpdatedBy { get; set; }
+    }
+
 }

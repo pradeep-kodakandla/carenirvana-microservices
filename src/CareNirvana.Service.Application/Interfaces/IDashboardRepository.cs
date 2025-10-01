@@ -17,5 +17,9 @@ namespace CareNirvana.Service.Application.Interfaces
         Task<List<AuthActivityItem>> GetPendingWQAsync(int? userId = null);
         Task<List<AuthActivityLine>> GetWQActivityLines(int? activityid = null);
         Task<int> UpdateAuthActivityLinesAsync(IEnumerable<int> lineIds, string status, string mdDecision, string mdNotes, int reviewedByUserId);
+        Task<long> InsertFaxFileAsync(FaxFile fax);
+        Task<int> UpdateFaxFileAsync(FaxFile fax);
+        Task<(List<FaxFile> Items, int Total)> GetFaxFilesAsync(string? search, int page, int pageSize, string? status);
+        Task<FaxFile?> GetFaxFileByIdAsync(long faxId);
     }
 }
