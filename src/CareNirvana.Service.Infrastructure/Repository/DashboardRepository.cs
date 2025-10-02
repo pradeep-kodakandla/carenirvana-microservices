@@ -75,10 +75,11 @@ namespace CareNirvana.Service.Infrastructure.Repository
             // One round-trip: compute all counts using scalar subqueries
             const string sql = @"
             SELECT
-                (SELECT COUNT(*) FROM public.membercarestaff  m  WHERE m.userid = @userId AND COALESCE(m.activeflag, true) = true) AS mymembercount,
-                (SELECT COUNT(*) FROM public.authdetail       a WHERE a.authassignedto = @userId) AS authcount,
-                (SELECT COUNT(*) FROM public.authactivity      aa WHERE aa.referredto = @userId and aa.service_line_count=0) AS activitycount,
-                (SELECT COUNT(*) FROM public.authactivity      aa WHERE aa.referredto = @userId and aa.service_line_count<>0) AS wqcount
+                (SELECT COUNT(DISTINCT m.memberdetailsid)  FROM public.membercarestaff m   WHERE m.userid = @userId AND COALESCE(m.activeflag, true) = true) AS mymembercount,
+                (SELECT COUNT(*) FROM public.authdetail a WHERE a.authassignedto = @userId) AS authcount,
+                (SELECT COUNT(*) FROM public.authactivity aa WHERE aa.referredto = @userId and aa.service_line_count=0) AS activitycount,
+                (SELECT COUNT(*) FROM public.authactivity aa WHERE aa.referredto = @userId and aa.service_line_count<>0) AS wqcount,
+                (SELECT COUNT(*) FROM public.faxfiles ) AS faxcount
             ;";
 
             using var cmd = new NpgsqlCommand(sql, connection);
@@ -95,7 +96,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     // Remaining set to 0 for now
                     RequestCount = 0,
                     ComplaintCount = 0,
-                    FaxCount = 0,
+                    FaxCount = reader.GetInt32(reader.GetOrdinal("faxcount")),
                     WQCount = reader.GetInt32(reader.GetOrdinal("wqcount"))
                 };
             }
