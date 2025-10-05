@@ -14,6 +14,7 @@ namespace CareNirvana.Service.Domain.Model
         public string? FirstName { get; set; }
         public string? LastName { get; set; }
         public int? MemberId { get; set; }
+        public int? MemberDetailsId { get; set; }
 
         public decimal? RiskScore { get; set; }
         public int? RiskLevelId { get; set; }
@@ -41,6 +42,7 @@ namespace CareNirvana.Service.Domain.Model
         public string? AuthClassValue { get; set; }
 
         public int MemberId { get; set; }
+        public int? MemberDetailsId { get; set; }
         public DateTime? NextReviewDate { get; set; }
         public DateTime? AuthDueDate { get; set; }
 
@@ -64,7 +66,7 @@ namespace CareNirvana.Service.Domain.Model
         public string FirstName { get; set; }
         public string LastName { get; set; }
         public int? MemberId { get; set; }
-
+        public int? MemberDetailsId { get; set; }
         public DateTime? CreatedOn { get; set; }
 
         public int? ActivityTypeId { get; set; }

@@ -113,6 +113,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                         md.firstname,
                                         md.lastname,
                                         md.memberid,
+                                        md.memberdetailsid,
                                         to_char(md.birthdate::date, 'MM-DD-YYYY') as birthdate,
                                         mr.riskscore,
                                         mr.risklevelid,
@@ -172,6 +173,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     FirstName = reader.IsDBNull(reader.GetOrdinal("firstname")) ? null : reader.GetString(reader.GetOrdinal("firstname")),
                     LastName = reader.IsDBNull(reader.GetOrdinal("lastname")) ? null : reader.GetString(reader.GetOrdinal("lastname")),
                     MemberId = reader.IsDBNull(reader.GetOrdinal("memberid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("memberid")),
+                    MemberDetailsId = reader.IsDBNull(reader.GetOrdinal("memberdetailsid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("memberdetailsid")),
                     DOB = reader.IsDBNull(reader.GetOrdinal("birthdate")) ? null : reader.GetString(reader.GetOrdinal("birthdate")),
 
                     RiskScore = reader.IsDBNull(reader.GetOrdinal("riskscore")) ? (decimal?)null : reader.GetFieldValue<decimal>(reader.GetOrdinal("riskscore")),
@@ -206,6 +208,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                       at.templatename,
                       ac.authclassvalue,
                       ad.memberid,
+                      md.memberdetailsid,
                       ad.nextreviewdate,
                       ad.authduedate,
                       ad.createdon,
@@ -300,6 +303,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     AuthClassValue = reader.IsDBNull(reader.GetOrdinal("authclassvalue")) ? null : reader.GetString(reader.GetOrdinal("authclassvalue")),
 
                     MemberId = reader.IsDBNull(reader.GetOrdinal("memberid")) ? 0 : reader.GetInt32(reader.GetOrdinal("memberid")),
+                    MemberDetailsId = reader.IsDBNull(reader.GetOrdinal("memberdetailsid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("memberdetailsid")),
                     NextReviewDate = reader.IsDBNull(reader.GetOrdinal("nextreviewdate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("nextreviewdate")),
                     AuthDueDate = reader.IsDBNull(reader.GetOrdinal("authduedate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("authduedate")),
 
@@ -330,6 +334,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     md.firstname,
                     md.lastname,
                     md.memberid,
+                    md.memberdetailsid,
                     aa.createdon,
                     aa.activitytypeid,
                     at.activitytype,
@@ -374,7 +379,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     FirstName = reader.IsDBNull(reader.GetOrdinal("firstname")) ? null : reader.GetString(reader.GetOrdinal("firstname")),
                     LastName = reader.IsDBNull(reader.GetOrdinal("lastname")) ? null : reader.GetString(reader.GetOrdinal("lastname")),
                     MemberId = reader.IsDBNull(reader.GetOrdinal("memberid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("memberid")),
-
+                    MemberDetailsId = reader.IsDBNull(reader.GetOrdinal("memberdetailsid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("memberdetailsid")),
                     CreatedOn = reader.IsDBNull(reader.GetOrdinal("createdon")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("createdon")),
 
                     ActivityTypeId = reader.IsDBNull(reader.GetOrdinal("activitytypeid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("activitytypeid")),
@@ -404,6 +409,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     md.firstname,
                     md.lastname,
                     md.memberid,
+                    md.memberdetailsid,
                     aa.createdon,
                     aa.activitytypeid,
                     at.activitytype,
@@ -451,7 +457,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     FirstName = reader.IsDBNull(reader.GetOrdinal("firstname")) ? null : reader.GetString(reader.GetOrdinal("firstname")),
                     LastName = reader.IsDBNull(reader.GetOrdinal("lastname")) ? null : reader.GetString(reader.GetOrdinal("lastname")),
                     MemberId = reader.IsDBNull(reader.GetOrdinal("memberid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("memberid")),
-
+                    MemberDetailsId = reader.IsDBNull(reader.GetOrdinal("memberdetailsid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("memberdetailsid")),
                     CreatedOn = reader.IsDBNull(reader.GetOrdinal("createdon")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("createdon")),
 
                     ActivityTypeId = reader.IsDBNull(reader.GetOrdinal("activitytypeid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("activitytypeid")),

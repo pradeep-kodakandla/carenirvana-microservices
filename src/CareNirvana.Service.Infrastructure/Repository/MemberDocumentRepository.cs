@@ -133,14 +133,14 @@ namespace CareNirvana.Service.Infrastructure.Repository
             var filter = includeDeleted ? "" : "AND md.deletedon IS NULL";
 
             var sql = $@"
-        SELECT md.memberdocumentid, md.memberid, md.documenttypeid, md.documentname, md.documentbytes,
-               md.createdon, md.createdby, md.updatedby, md.updatedon, md.deletedby, md.deletedon,
-               COUNT(*) OVER() AS total_count
-        FROM memberdocument md
-        WHERE md.memberid = @memberid
-          {filter}
-        ORDER BY COALESCE(md.updatedon, md.createdon) DESC
-        OFFSET @offset LIMIT @limit;";
+                SELECT md.memberdocumentid, md.memberid, md.documenttypeid, md.documentname, md.documentbytes,
+                       md.createdon, md.createdby, md.updatedby, md.updatedon, md.deletedby, md.deletedon,
+                       COUNT(*) OVER() AS total_count
+                FROM memberdocument md
+                WHERE md.memberid = @memberid
+                  {filter}
+                ORDER BY COALESCE(md.updatedon, md.createdon) DESC
+                OFFSET @offset LIMIT @limit;";
 
             using var conn = new NpgsqlConnection(_connectionString);
             await conn.OpenAsync();
@@ -171,10 +171,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     DeletedOn = reader.IsDBNull(reader.GetOrdinal("deletedon")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("deletedon"))
                 });
             }
-
             return (results, total);
         }
-
-
     }
 }

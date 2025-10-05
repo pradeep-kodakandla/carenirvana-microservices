@@ -59,7 +59,9 @@ builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
 builder.Services.AddScoped<IMemberEnrollmentRepository, MemberEnrollmentRepository>();
 builder.Services.AddScoped<IMemberNotes, MemberNotesRepository>();
 builder.Services.AddScoped<IMemberDocument, MemberDocumentRepository>();
-
+builder.Services.AddScoped<IMemberCareGiverRepository, MemberCareGiverRepository>();
+builder.Services.AddScoped<IMemberCareTeamRepository, MemberCareTeamRepository>();
+builder.Services.AddScoped<IMemberProgramRepository, MemberProgramRepository>();
 
 var allowedOrigins = new[] {
     "http://localhost:4200",

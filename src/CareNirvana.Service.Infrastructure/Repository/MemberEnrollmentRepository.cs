@@ -28,23 +28,23 @@ namespace CareNirvana.Service.Infrastructure.Repository
             await conn.OpenAsync();
 
             const string sql = @"
-        SELECT
-          memberenrollmentid,
-          memberdetailsid,
-          startdate,
-          enddate,
-          -- normalize to boolean regardless of how status is stored in the view/table
-          CASE
-            WHEN status::text IN ('true','t','1','TRUE','True') THEN TRUE
-            WHEN status::text IN ('false','f','0','FALSE','False') THEN FALSE
-            ELSE FALSE
-          END AS status,
-          hierarchy_path,
-          level_map::text AS level_map,
-          levels::text     AS levels
-        FROM vw_member_enrollment_hierarchy_json
-        WHERE memberdetailsid = @memberdetailsid
-        ORDER BY memberenrollmentid;";
+                SELECT
+                  memberenrollmentid,
+                  memberdetailsid,
+                  startdate,
+                  enddate,
+                  -- normalize to boolean regardless of how status is stored in the view/table
+                  CASE
+                    WHEN status::text IN ('true','t','1','TRUE','True') THEN TRUE
+                    WHEN status::text IN ('false','f','0','FALSE','False') THEN FALSE
+                    ELSE FALSE
+                  END AS status,
+                  hierarchy_path,
+                  level_map::text AS level_map,
+                  levels::text     AS levels
+                FROM vw_member_enrollment_hierarchy_json
+                WHERE memberdetailsid = @memberdetailsid
+                ORDER BY memberenrollmentid;";
 
             await using var cmd = new NpgsqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@memberdetailsid", memberdetailsId);
