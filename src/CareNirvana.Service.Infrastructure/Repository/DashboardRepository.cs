@@ -125,7 +125,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                         hie.level_map,
 	                                    mc.startdate,
 	                                    mc.enddate,
-                                        coalesce(ac.authcount, 0) as authcount
+                                        coalesce(ac.authcount, 0) as authcount,
+                                        COALESCE(al.alertcount, 0)   AS alertcount
                                     from membercarestaff mc
                                     join memberdetails md
                                       on md.memberdetailsid = mc.memberdetailsid
@@ -156,6 +157,12 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                         from authdetail ad
                                         group by ad.memberid
                                     ) ac on ac.memberid = md.memberid
+                                    LEFT JOIN (
+                                        SELECT ma2.memberdetailsid, COUNT(*) AS alertcount
+                                        FROM memberalert ma2
+                                        WHERE COALESCE(ma2.activeflag, TRUE) = TRUE
+                                        GROUP BY ma2.memberdetailsid
+                                    ) al ON al.memberdetailsid = md.memberdetailsid
                                     where mc.userid = @userId
                                       and mc.activeflag = true;";
 
@@ -188,8 +195,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     LevelMap = reader.IsDBNull(reader.GetOrdinal("level_map")) ? null : reader.GetString(reader.GetOrdinal("level_map")),
                     StartDate = reader.IsDBNull(reader.GetOrdinal("startdate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("startdate")),
                     EndDate = reader.IsDBNull(reader.GetOrdinal("enddate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("enddate")),
-                    AuthCount = reader.GetInt32(reader.GetOrdinal("authcount"))
-
+                    AuthCount = reader.GetInt32(reader.GetOrdinal("authcount")),
+                    AlertCount = reader.GetInt32(reader.GetOrdinal("alertcount"))
                 };
 
                 results.Add(o);
