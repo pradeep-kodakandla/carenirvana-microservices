@@ -12,6 +12,7 @@ namespace CareNirvana.Service.Application.Interfaces
         Task<List<MemberCareStaff>> GetMyCareStaff(int userId);
         Task<DashboardCounts> DashBoardCount(int userId);
         Task<List<MemberSummary>> GetMemberSummaries(int userId);
+        Task<List<MemberSummary>> GetMemberSummary(int memberdetailsid);
         Task<List<AuthDetailListItem>> GetAuthDetailListAsync(int userId);
         Task<List<AuthActivityItem>> GetPendingAuthActivitiesAsync(int? userId = null);
         Task<List<AuthActivityItem>> GetPendingWQAsync(int? userId = null);

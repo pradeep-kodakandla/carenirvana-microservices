@@ -31,6 +31,9 @@ namespace CareNirvana.Service.Domain.Model
         public string? DOB { get; set; }
         public DateTime? StartDate { get; set; }
         public DateTime? EndDate { get; set; }
+        public DateTime? EnrollmentEndDate { get; set; }
+        public string? Gender { get; set; }
+        public string? Programs { get; set; }
         public int ActivityCount { get; set; }
         public int ComplaintCount { get; set; }
         public int CarePlanCount { get; set; }

@@ -13,6 +13,7 @@ namespace CareNirvana.Service.Application.Services
         public Task<List<MemberCareStaff>> GetMyCareStaff(int userId) => _repo.GetMyCareStaff(userId);
         public Task<DashboardCounts> DashBoardCount(int userId) => _repo.DashBoardCount(userId);
         public Task<List<MemberSummary>> GetMemberSummaries(int userId) => _repo.GetMemberSummaries(userId);
+        public Task<List<MemberSummary>> GetMemberSummary(int memberdetailsid) => _repo.GetMemberSummary(memberdetailsid);
         public Task<List<AuthDetailListItem>> GetAuthDetailListAsync(int userId) => _repo.GetAuthDetailListAsync(userId);
         public Task<List<AuthActivityItem>> GetPendingAuthActivitiesAsync(int? userId = null) => _repo.GetPendingAuthActivitiesAsync(userId);
         public Task<List<AuthActivityItem>> GetPendingWQAsync(int? userId = null) => _repo.GetPendingWQAsync(userId);

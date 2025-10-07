@@ -37,6 +37,15 @@ public class DashBoardController : ControllerBase
             return NotFound(new { message = "No member summaries found for this user." });
         return Ok(result);
     }
+    [HttpGet("membersummary/{memberDetailsId}")]
+    public async Task<IActionResult> GetMemberSummaryDetails(int memberDetailsId)
+    {
+        var result = await _dashBoardService.GetMemberSummary(memberDetailsId);
+        if (result == null)
+            return NotFound(new { message = "No member summary details found for this ID." });
+        return Ok(result);
+    }
+
     [HttpGet("authdetails/{userId}")]
     public async Task<IActionResult> GetAuthDetailListAsync(int userId)
     {
