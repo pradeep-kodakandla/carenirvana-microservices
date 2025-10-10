@@ -87,7 +87,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                         command.Parameters.AddWithValue("@nextReviewDate", authDetail.NextReviewDate);
                         command.Parameters.AddWithValue("@treatmentType", authDetail.TreatmentType);
                         command.Parameters.AddWithValue("@authclassid", authDetail.AuthClassId);
-                        command.Parameters.AddWithValue("@authassignedto", 1);
+                        command.Parameters.AddWithValue("@authassignedto", authDetail.CreatedBy);
                         var result = await command.ExecuteScalarAsync();
                         long insertedId = Convert.ToInt64(result);
                         return insertedId;

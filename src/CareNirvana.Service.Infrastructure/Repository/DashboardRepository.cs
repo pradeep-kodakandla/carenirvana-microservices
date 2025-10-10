@@ -220,7 +220,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     EnrollmentEndDate = reader.IsDBNull(reader.GetOrdinal("enrollmentenddate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("enrollmentenddate")),
                     StartDate = reader.IsDBNull(reader.GetOrdinal("startdate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("startdate")),
                     EndDate = reader.IsDBNull(reader.GetOrdinal("enddate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("enddate")),
-                    
+
                     Gender = reader.IsDBNull(reader.GetOrdinal("gender")) ? null : reader.GetString(reader.GetOrdinal("gender")),
                     Programs = reader.IsDBNull(reader.GetOrdinal("programs")) ? null : reader.GetString(reader.GetOrdinal("programs")),
                     AuthCount = reader.GetInt32(reader.GetOrdinal("authcount")),
@@ -507,7 +507,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     aa.followupdatetime,
                     aa.duedate,
                     aa.statusid,
-                    'Pending' as status
+                    'Pending' as status,
+                    ad.authnumber
                 from authactivity aa
                 join authdetail ad on ad.authdetailid = aa.authdetailid
                 join memberdetails md on md.memberid = ad.memberid
@@ -556,7 +557,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     DueDate = reader.IsDBNull(reader.GetOrdinal("duedate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("duedate")),
 
                     StatusId = reader.IsDBNull(reader.GetOrdinal("statusid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("statusid")),
-                    Status = reader.IsDBNull(reader.GetOrdinal("status")) ? null : reader.GetString(reader.GetOrdinal("status"))
+                    Status = reader.IsDBNull(reader.GetOrdinal("status")) ? null : reader.GetString(reader.GetOrdinal("status")),
+                    AuthNumber = reader.IsDBNull(reader.GetOrdinal("authnumber")) ? null : reader.GetString(reader.GetOrdinal("authnumber"))
                 };
 
                 results.Add(item);
