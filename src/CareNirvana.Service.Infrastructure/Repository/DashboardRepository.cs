@@ -147,7 +147,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                 left join memberphonenumber mp 
                                   on mp.memberdetailsid = md.memberdetailsid
                                 left join vw_member_enrollment_hierarchy_json hie
-                                  on hie.memberdetailsid = md.memberdetailsid
+                                  on hie.memberdetailsid = md.memberdetailsid and hie.enddate > current_date
                                 left join lateral (
                                     select elem->>'code' as risklevel_code
                                     from cfgadmindata cad,
