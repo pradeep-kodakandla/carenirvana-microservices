@@ -77,8 +77,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
             SELECT
                 (SELECT COUNT(DISTINCT m.memberdetailsid)  FROM public.membercarestaff m   WHERE m.userid = @userId AND COALESCE(m.activeflag, true) = true) AS mymembercount,
                 (SELECT COUNT(*) FROM public.authdetail a WHERE a.authassignedto = @userId) AS authcount,
-                (SELECT COUNT(*) FROM public.authactivity aa WHERE aa.referredto = @userId and aa.service_line_count=0) AS activitycount,
-                (SELECT COUNT(*) FROM public.authactivity aa WHERE aa.referredto = @userId and aa.service_line_count<>0) AS wqcount,
+                (SELECT COUNT(*) FROM public.authactivity aa WHERE aa.referto = @userId and aa.service_line_count=0) AS activitycount,
+                (SELECT COUNT(*) FROM public.authactivity aa WHERE aa.referto = @userId and aa.service_line_count<>0) AS wqcount,
                 (SELECT COUNT(*) FROM public.faxfiles ) AS faxcount
             ;";
 
@@ -177,10 +177,10 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                       and (elem->>'id')::int = mp2.programid
                                 ) prog on true
                                 left join (
-                                    select ad.memberid, count(*) as authcount
+                                    select ad.memberdetailsid, count(*) as authcount
                                     from authdetail ad
-                                    group by ad.memberid
-                                ) ac on ac.memberid = md.memberid
+                                    group by ad.memberdetailsid
+                                ) ac on ac.memberdetailsid = md.memberdetailsid
                                 LEFT JOIN (
                                     SELECT ma2.memberdetailsid, COUNT(*) AS alertcount
                                     FROM memberalert ma2
@@ -306,10 +306,10 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                       and (elem->>'id')::int = mp2.programid
                                 ) prog on true
                                 left join (
-                                    select ad.memberid, count(*) as authcount
+                                    select ad.memberdetailsid, count(*) as authcount
                                     from authdetail ad
-                                    group by ad.memberid
-                                ) ac on ac.memberid = md.memberid
+                                    group by ad.memberdetailsid
+                                ) ac on ac.memberdetailsid = md.memberdetailsid
                                 LEFT JOIN (
                                     SELECT ma2.memberdetailsid, COUNT(*) AS alertcount
                                     FROM memberalert ma2
@@ -371,8 +371,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                       rl.authstatusvalue,
                       at.templatename,
                       ac.authclassvalue,
-                      ad.memberid,
-                      md.memberdetailsid,
+                      ad.memberdetailsid,
+                      md.memberid,
                       ad.nextreviewdate,
                       ad.authduedate,
                       ad.createdon,
@@ -442,7 +442,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
                     LEFT JOIN authtemplate at ON at.id = ad.authtypeid
                     LEFT JOIN securityuser su ON su.userid = ad.createdby
-                    LEFT JOIN memberdetails md on md.memberid = ad.memberid
+                    LEFT JOIN memberdetails md on md.memberdetailsid = ad.memberdetailsid
                     WHERE ad.deletedby IS NULL and ad.authassignedto = @userId
                     ORDER BY ad.createdon DESC;";
 
@@ -466,8 +466,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     TemplateName = reader.IsDBNull(reader.GetOrdinal("templatename")) ? null : reader.GetString(reader.GetOrdinal("templatename")),
                     AuthClassValue = reader.IsDBNull(reader.GetOrdinal("authclassvalue")) ? null : reader.GetString(reader.GetOrdinal("authclassvalue")),
 
-                    MemberId = reader.IsDBNull(reader.GetOrdinal("memberid")) ? 0 : reader.GetInt32(reader.GetOrdinal("memberid")),
                     MemberDetailsId = reader.IsDBNull(reader.GetOrdinal("memberdetailsid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("memberdetailsid")),
+                    MemberId = reader.IsDBNull(reader.GetOrdinal("memberid")) ? 0 : reader.GetInt32(reader.GetOrdinal("memberid")),
                     NextReviewDate = reader.IsDBNull(reader.GetOrdinal("nextreviewdate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("nextreviewdate")),
                     AuthDueDate = reader.IsDBNull(reader.GetOrdinal("authduedate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("authduedate")),
 
@@ -502,7 +502,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     aa.createdon,
                     aa.activitytypeid,
                     at.activitytype,
-                    aa.referredto,
+                    aa.referto,
                     su.username,
                     aa.followupdatetime,
                     aa.duedate,
@@ -511,8 +511,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     ad.authnumber
                 from authactivity aa
                 join authdetail ad on ad.authdetailid = aa.authdetailid
-                join memberdetails md on md.memberid = ad.memberid
-                join securityuser su on su.userid = aa.referredto
+                join memberdetails md on md.memberdetailsid = ad.memberdetailsid
+                join securityuser su on su.userid = aa.referto
                 left join lateral (
                     select elem->>'activityType' as activitytype
                     from cfgadmindata cad,
@@ -522,7 +522,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     limit 1
                 ) at on true
                 where aa.service_line_count = 0
-                  and (@userId is null or aa.referredto = @userId)
+                  and (@userId is null or aa.referto = @userId)
                 order by aa.createdon desc;";
 
             var results = new List<AuthActivityItem>();
@@ -550,7 +550,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     ActivityTypeId = reader.IsDBNull(reader.GetOrdinal("activitytypeid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("activitytypeid")),
                     ActivityType = reader.IsDBNull(reader.GetOrdinal("activitytype")) ? null : reader.GetString(reader.GetOrdinal("activitytype")),
 
-                    ReferredTo = reader.IsDBNull(reader.GetOrdinal("referredto")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("referredto")),
+                    ReferredTo = reader.IsDBNull(reader.GetOrdinal("referto")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("referto")),
                     UserName = reader.IsDBNull(reader.GetOrdinal("username")) ? null : reader.GetString(reader.GetOrdinal("username")),
 
                     FollowUpDateTime = reader.IsDBNull(reader.GetOrdinal("followupdatetime")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("followupdatetime")),
@@ -579,7 +579,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     aa.createdon,
                     aa.activitytypeid,
                     at.activitytype,
-                    aa.referredto,
+                    aa.referto,
                     su.username,
                     aa.followupdatetime,
                     aa.duedate,
@@ -590,8 +590,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     aa.authactivityid
                 from authactivity aa
                 join authdetail ad on ad.authdetailid = aa.authdetailid
-                join memberdetails md on md.memberid = ad.memberid
-                join securityuser su on su.userid = aa.referredto
+                join memberdetails md on md.memberdetailsid = ad.memberdetailsid
+                join securityuser su on su.userid = aa.referto
                 left join lateral (
                     select elem->>'activityType' as activitytype
                     from cfgadmindata cad,
@@ -601,7 +601,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     limit 1
                 ) at on true
                 where aa.service_line_count <> 0
-                  and (@userId is null or aa.referredto = @userId)
+                  and (@userId is null or aa.referto = @userId)
                 order by aa.createdon desc;";
 
             var results = new List<AuthActivityItem>();
@@ -629,7 +629,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     ActivityTypeId = reader.IsDBNull(reader.GetOrdinal("activitytypeid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("activitytypeid")),
                     ActivityType = reader.IsDBNull(reader.GetOrdinal("activitytype")) ? null : reader.GetString(reader.GetOrdinal("activitytype")),
 
-                    ReferredTo = reader.IsDBNull(reader.GetOrdinal("referredto")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("referredto")),
+                    ReferredTo = reader.IsDBNull(reader.GetOrdinal("referto")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("referto")),
                     UserName = reader.IsDBNull(reader.GetOrdinal("username")) ? null : reader.GetString(reader.GetOrdinal("username")),
 
                     FollowUpDateTime = reader.IsDBNull(reader.GetOrdinal("followupdatetime")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("followupdatetime")),

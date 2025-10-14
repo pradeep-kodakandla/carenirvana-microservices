@@ -52,7 +52,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     ProviderId = reader["providerid"] as int?,
                     FollowUpDateTime = reader["followupdatetime"] as DateTime?,
                     DueDate = reader["duedate"] as DateTime?,
-                    ReferredTo = reader["referredto"] as int?,
+                    ReferredTo = reader["referto"] as int?,
                     IsWorkBasket = reader["isworkbasket"] as bool?,
                     QueueId = reader["queueid"] as int?,
                     Comment = reader["comment"] as string,
@@ -93,7 +93,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     ProviderId = reader["providerid"] as int?,
                     FollowUpDateTime = reader["followupdatetime"] as DateTime?,
                     DueDate = reader["duedate"] as DateTime?,
-                    ReferredTo = reader["referredto"] as int?,
+                    ReferredTo = reader["referto"] as int?,
                     IsWorkBasket = reader["isworkbasket"] as bool?,
                     QueueId = reader["queueid"] as int?,
                     Comment = reader["comment"] as string,
@@ -120,9 +120,9 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
             var cmd = new NpgsqlCommand(@"
             INSERT INTO authactivity 
-            (authdetailid, activitytypeid, priorityid, providerid, followupdatetime, duedate, referredto, isworkbasket, queueid, comment, statusid, performeddatetime, performedby, activeflag, createdon, createdby) 
+            (authdetailid, activitytypeid, priorityid, providerid, followupdatetime, duedate, referto, isworkbasket, queueid, comment, statusid, performeddatetime, performedby, activeflag, createdon, createdby) 
             VALUES 
-            (@authdetailid, @activitytypeid, @priorityid, @providerid, @followupdatetime, @duedate, @referredto, @isworkbasket, @queueid, @comment, @statusid, @performeddatetime, @performedby, @activeflag, @createdon, @createdby)
+            (@authdetailid, @activitytypeid, @priorityid, @providerid, @followupdatetime, @duedate, @referto, @isworkbasket, @queueid, @comment, @statusid, @performeddatetime, @performedby, @activeflag, @createdon, @createdby)
             RETURNING authactivityid", conn);
 
             cmd.Parameters.AddWithValue("authdetailid", (object?)activity.AuthDetailId ?? DBNull.Value);
@@ -131,7 +131,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
             cmd.Parameters.AddWithValue("providerid", (object?)activity.ProviderId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("followupdatetime", (object?)activity.FollowUpDateTime ?? DBNull.Value);
             cmd.Parameters.AddWithValue("duedate", (object?)activity.DueDate ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("referredto", (object?)activity.ReferredTo ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("referto", (object?)activity.ReferredTo ?? DBNull.Value);
             cmd.Parameters.AddWithValue("isworkbasket", (object?)activity.IsWorkBasket ?? DBNull.Value);
             cmd.Parameters.AddWithValue("queueid", (object?)activity.QueueId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("comment", (object?)activity.Comment ?? DBNull.Value);
@@ -175,7 +175,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 cmd = new NpgsqlCommand(@"
             UPDATE authactivity SET 
                 authdetailid = @authdetailid, activitytypeid = @activitytypeid, priorityid = @priorityid,
-                providerid = @providerid, followupdatetime = @followupdatetime, duedate = @duedate, referredto = @referredto,
+                providerid = @providerid, followupdatetime = @followupdatetime, duedate = @duedate, referto = @referredto,
                 isworkbasket = @isworkbasket, queueid = @queueid, comment = @comment, statusid = @statusid,
                 performeddatetime = @performeddatetime, performedby = @performedby, activeflag = @activeflag,
                 updatedon = @updatedon, updatedby = @updatedby
@@ -188,7 +188,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 cmd.Parameters.AddWithValue("providerid", (object?)activity.ProviderId ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("followupdatetime", (object?)activity.FollowUpDateTime ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("duedate", (object?)activity.DueDate ?? DBNull.Value);
-                cmd.Parameters.AddWithValue("referredto", (object?)activity.ReferredTo ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("referto", (object?)activity.ReferredTo ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("isworkbasket", (object?)activity.IsWorkBasket ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("queueid", (object?)activity.QueueId ?? DBNull.Value);
                 cmd.Parameters.AddWithValue("comment", (object?)activity.Comment ?? DBNull.Value);
@@ -221,12 +221,12 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 var insertParentSql = @"
                     INSERT INTO authactivity
                      (authdetailid, activitytypeid, priorityid, providerid, followupdatetime, duedate,
-                      referredto, isworkbasket, queueid, comment, statusid, performeddatetime, performedby,
+                      referto, isworkbasket, queueid, comment, statusid, performeddatetime, performedby,
                       activeflag, createdon, createdby,
                       service_line_count, md_review_status, md_aggregate_decision, payload_snapshot_json)
                     VALUES
                      (@authdetailid, @activitytypeid, @priorityid, @providerid, @followupdatetime, @duedate,
-                      @referredto, @isworkbasket, @queueid, @comment, @statusid, @performeddatetime, @performedby,
+                      @referto, @isworkbasket, @queueid, @comment, @statusid, @performeddatetime, @performedby,
                       @activeflag, @createdon, @createdby,
                       @service_line_count, @md_review_status, @md_aggregate_decision, @payload_snapshot_json)
                     RETURNING authactivityid;";
@@ -241,7 +241,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     cmd.Parameters.AddWithValue("providerid", (object?)a.ProviderId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("followupdatetime", (object?)a.FollowUpDateTime ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("duedate", (object?)a.DueDate ?? DBNull.Value);
-                    cmd.Parameters.AddWithValue("referredto", (object?)a.ReferredTo ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("referto", (object?)a.ReferredTo ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("isworkbasket", (object?)a.IsWorkBasket ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("queueid", (object?)a.QueueId ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("comment", (object?)a.Comment ?? DBNull.Value);
@@ -415,7 +415,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                         ProviderId = reader["providerid"] as int?,
                         FollowUpDateTime = reader["followupdatetime"] as DateTime?,
                         DueDate = reader["duedate"] as DateTime?,
-                        ReferredTo = reader["referredto"] as int?,
+                        ReferredTo = reader["referto"] as int?,
                         IsWorkBasket = reader["isworkbasket"] as bool?,
                         QueueId = reader["queueid"] as int?,
                         Comment = reader["comment"] as string,

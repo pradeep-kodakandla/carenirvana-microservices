@@ -60,9 +60,9 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     await connection.OpenAsync();
                     using (var command = new NpgsqlCommand(
                                     @"INSERT INTO authdetail 
-                                    (data, createdon, createdby, authnumber, authtypeid, memberid, authduedate, nextreviewdate, treatementtype, authclassid, authassignedto)
+                                    (data, createdon, createdby, authnumber, authtypeid, memberdetailsid, authduedate, nextreviewdate, treatementtype, authclassid, authassignedto)
                                     VALUES 
-                                    (@data, @createdon, @createdby, @authNumber, @authTypeId, @memberId, @authDueDate, @nextReviewDate, @treatmentType, @authclassid, @authassignedto)
+                                    (@data, @createdon, @createdby, @authNumber, @authTypeId, @memberdetailsid, @authDueDate, @nextReviewDate, @treatmentType, @authclassid, @authassignedto)
                                     RETURNING authdetailid;", connection))
                     {
                         // Convert objects inside List<object> to proper JSON-compatible objects
@@ -82,7 +82,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                         command.Parameters.AddWithValue("@createdby", authDetail.CreatedBy);
                         command.Parameters.AddWithValue("@authNumber", authDetail.AuthNumber);
                         command.Parameters.AddWithValue("@authTypeId", authDetail.AuthTypeId);
-                        command.Parameters.AddWithValue("@memberId", authDetail.MemberId);
+                        command.Parameters.AddWithValue("@memberdetailsid", authDetail.MemberId);
                         command.Parameters.AddWithValue("@authDueDate", authDetail.AuthDueDate);
                         command.Parameters.AddWithValue("@nextReviewDate", authDetail.NextReviewDate);
                         command.Parameters.AddWithValue("@treatmentType", authDetail.TreatmentType);
@@ -199,10 +199,10 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 {
                     await connection.OpenAsync();
                     using (var command = new NpgsqlCommand(
-                        "SELECT authdetailid, authnumber, authtypeid, memberid, authduedate, nextreviewdate, treatementtype, data, createdon, createdby, updatedon, updatedby, deletedon, deletedby, authclassid, authassignedto " +
-                        "FROM authdetail WHERE memberid = @memberId AND deletedon IS NULL", connection))
+                        "SELECT authdetailid, authnumber, authtypeid, memberdetailsid, authduedate, nextreviewdate, treatementtype, data, createdon, createdby, updatedon, updatedby, deletedon, deletedby, authclassid, authassignedto " +
+                        "FROM authdetail WHERE memberdetailsid = @memberdetailsid AND deletedon IS NULL", connection))
                     {
-                        command.Parameters.AddWithValue("@memberId", memberId);
+                        command.Parameters.AddWithValue("@memberdetailsid", memberId);
 
                         using (var reader = await command.ExecuteReaderAsync())
                         {
@@ -251,7 +251,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 {
                     await connection.OpenAsync();
                     using (var command = new NpgsqlCommand(
-                        "SELECT authdetailid, authnumber, authtypeid, memberid, authduedate, nextreviewdate, treatementtype, data, createdon, createdby, updatedon, updatedby, deletedon, deletedby, authclassid, authassignedto " +
+                        "SELECT authdetailid, authnumber, authtypeid, memberdetailsid, authduedate, nextreviewdate, treatementtype, data, createdon, createdby, updatedon, updatedby, deletedon, deletedby, authclassid, authassignedto " +
                         "FROM authdetail WHERE authnumber = @authNumber AND deletedon IS NULL", connection))
                     {
                         command.Parameters.AddWithValue("@authNumber", authNumber);
