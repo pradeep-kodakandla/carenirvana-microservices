@@ -47,7 +47,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
             var decryptedPassword = DecryptPassword(password, secretKey, iv);
 
-            var sql = "SELECT userid, userdetailid, username, password FROM securityuser WHERE username=@username AND password=@password AND activeflag=true";
+            var sql = "SELECT userid, userdetailid, username, password FROM securityuser WHERE LOWER(username) = LOWER(@username) AND password=@password AND activeflag=true";
             var parameters = new Dictionary<string, object>
             {
                 { "@username", username },
