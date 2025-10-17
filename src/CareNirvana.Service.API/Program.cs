@@ -64,6 +64,7 @@ builder.Services.AddScoped<IMemberCareTeamRepository, MemberCareTeamRepository>(
 builder.Services.AddScoped<IMemberProgramRepository, MemberProgramRepository>();
 builder.Services.AddScoped<IMemberAlertRepository, MemberAlertsRepository>();
 builder.Services.AddScoped<IMemberJourney, MemberJourneyRepository>();
+builder.Services.AddScoped<IRecentlyAccessed, RecentlyAccessedRepository>();
 
 var allowedOrigins = new[] {
     "http://localhost:4200",

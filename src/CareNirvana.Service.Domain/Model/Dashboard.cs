@@ -118,6 +118,7 @@ namespace CareNirvana.Service.Domain.Model
 
         public DateTime? UpdatedOn { get; set; }
         public int? Version { get; set; }
+        public string? Comments { get; set; }
     }
 
     public class FaxFile

@@ -78,7 +78,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 (SELECT COUNT(DISTINCT m.memberdetailsid)  FROM public.membercarestaff m   WHERE m.userid = @userId AND COALESCE(m.activeflag, true) = true) AS mymembercount,
                 (SELECT COUNT(*) FROM public.authdetail a WHERE a.authassignedto = @userId) AS authcount,
                 (SELECT COUNT(*) FROM public.authactivity aa WHERE aa.referto = @userId and aa.service_line_count=0) AS activitycount,
-                (SELECT COUNT(*) FROM public.authactivity aa WHERE aa.referto = @userId and aa.service_line_count<>0) AS wqcount,
+                (SELECT COUNT(*) FROM public.authactivity aa WHERE aa.referto = @userId and aa.service_line_count<>0 and md_review_status <> 'Approved') AS wqcount,
                 (SELECT COUNT(*) FROM public.faxfiles ) AS faxcount
             ;";
 
@@ -584,7 +584,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     aa.followupdatetime,
                     aa.duedate,
                     aa.statusid,
-                    'Pending' as status,
+                    md_review_status as status,
                     ad.authnumber,
                     aa.comment,
                     aa.authactivityid
@@ -655,8 +655,9 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 id, activityid, decisionlineid, servicecode, description,
                 fromdate, todate, requested, approved, denied,
                 initialrecommendation, status, mddecision, mdnotes,
-                reviewedbyuserid, reviewedon, updatedon, version
-                from authactivityline
+                reviewedbyuserid, reviewedon, aal.updatedon, version, aa.comment
+                from authactivityline aal
+				JOIN authactivity aa on aa.authactivityid = aal.activityid
                 where activityid = @activityid
                 order by fromdate nulls first, id;";
 
@@ -693,6 +694,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     ReviewedOn = reader.IsDBNull(reader.GetOrdinal("reviewedon")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("reviewedon")),
                     UpdatedOn = reader.IsDBNull(reader.GetOrdinal("updatedon")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("updatedon")),
                     Version = reader.IsDBNull(reader.GetOrdinal("version")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("version")),
+                    Comments = reader.IsDBNull(reader.GetOrdinal("comment")) ? null : reader.GetString(reader.GetOrdinal("comment"))
                 };
 
                 results.Add(item);
@@ -714,6 +716,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
             using var conn = new NpgsqlConnection(_connectionString);
             await conn.OpenAsync();
 
+            await using var tx = await conn.BeginTransactionAsync();
+
             const string sql = @"
                 UPDATE authactivityline
                 SET status = @status,
@@ -729,37 +733,84 @@ namespace CareNirvana.Service.Infrastructure.Repository
             cmd.Parameters.AddWithValue("@mdDecision", mdDecision ?? (object)DBNull.Value);
             cmd.Parameters.AddWithValue("@mdNotes", mdNotes ?? (object)DBNull.Value);
             cmd.Parameters.AddWithValue("@reviewedByUserId", reviewedByUserId);
-            cmd.Parameters.AddWithValue("@ids", lineIds.ToArray());
+            var idArray = lineIds.ToArray();
+            var p = cmd.Parameters.Add("@ids", NpgsqlDbType.Array | NpgsqlDbType.Integer);
+            p.Value = idArray;
 
-            return await cmd.ExecuteNonQueryAsync();
+            //await tx.CommitAsync();
+
+            var affected = await cmd.ExecuteNonQueryAsync();
+
+            const string rollupSql = @"
+            WITH affected AS (
+                SELECT DISTINCT activityid
+                FROM authactivityline
+                WHERE id = ANY(@ids)
+            ),
+            agg AS (
+                SELECT
+                    l.activityid,
+                    COUNT(*) AS total,
+                    COUNT(*) FILTER (WHERE l.status = 'Approved') AS completed,
+                    COUNT(*) FILTER (WHERE l.status <> 'Approved') AS not_approved,
+                    COUNT(*) FILTER (WHERE l.mddecision = 'Approved' AND l.status = 'Approved') AS approved,
+                    COUNT(*) FILTER (WHERE l.mddecision = 'Denied'   AND l.status = 'Denied')   AS denied_count
+                FROM authactivityline l
+                INNER JOIN affected a ON a.activityid = l.activityid
+                GROUP BY l.activityid
+            )
+            UPDATE authactivity a
+            SET service_line_count    = agg.total,
+                md_review_status      = CASE
+                                          WHEN agg.approved = agg.total THEN 'Approved'
+                                          WHEN agg.approved > 0         THEN 'InProgress'
+                                          ELSE 'Pending'
+                                        END,
+                md_aggregate_decision = CASE
+                                          WHEN agg.approved = 0         THEN 'Pending'
+                                          WHEN agg.approved = agg.total THEN 'Approved'
+                                          WHEN agg.denied_count = agg.total THEN 'Denied'
+                                          ELSE 'Mixed'
+                                        END
+            FROM agg
+            WHERE a.authactivityid = agg.activityid;";
+
+            await using var roll = new NpgsqlCommand(rollupSql, conn, tx);
+            // reuse the same ids array
+            var p2 = roll.Parameters.Add("@ids", NpgsqlDbType.Array | NpgsqlDbType.Integer);
+            p2.Value = idArray;
+
+            await roll.ExecuteNonQueryAsync();
+
+            await tx.CommitAsync();
+            return affected;
         }
+
 
         public async Task<long> InsertFaxFileAsync(FaxFile fax)
         {
             using var conn = new NpgsqlConnection(_connectionString);
             await conn.OpenAsync();
 
-            Console.WriteLine($"Inserting fax file record... FileBytes length = {fax.FileBytes?.Length ?? 0}");
-            Console.WriteLine($"Inserting fax file data... {System.Text.Json.JsonSerializer.Serialize(fax)}");
-
             const string sql = @"
-        INSERT INTO faxfiles
-        (
-            filename, storedpath, originalname, contenttype, sizebytes, sha256hex,
-            receivedat, uploadedby, uploadedat,
-            pagecount, memberid, workbasket, priority, status, processstatus,
-            meta, ocrtext, ocrjsonpath, filebytes,
-            createdon, createdby, updatedon, updatedby
-        )
-        VALUES
-        (
-            @filename, @storedpath, @originalname, @contenttype, @sizebytes, @sha256hex,
-            @receivedat, @uploadedby, @uploadedat,
-            @pagecount, @memberid, @workbasket, @priority, @status, @processstatus,
-            @meta, @ocrtext, @ocrjsonpath, @filebytes,
-            @createdon, @createdby, @updatedon, @updatedby
-        )
-        RETURNING faxid;";
+
+                INSERT INTO faxfiles
+                (
+                    filename, storedpath, originalname, contenttype, sizebytes, sha256hex,
+                    receivedat, uploadedby, uploadedat,
+                    pagecount, memberid, workbasket, priority, status, processstatus,
+                    meta, ocrtext, ocrjsonpath, filebytes,
+                    createdon, createdby, updatedon, updatedby
+                )
+                VALUES
+                (
+                    @filename, @storedpath, @originalname, @contenttype, @sizebytes, @sha256hex,
+                    @receivedat, @uploadedby, @uploadedat,
+                    @pagecount, @memberid, @workbasket, @priority, @status, @processstatus,
+                    @meta, @ocrtext, @ocrjsonpath, @filebytes,
+                    @createdon, @createdby, @updatedon, @updatedby
+                )
+                RETURNING faxid;";
 
             using var cmd = new NpgsqlCommand(sql, conn);
 
@@ -896,7 +947,6 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     f.meta,
                     f.ocrtext,
                     f.ocrjsonpath,
-                    f.filebytes,
                     f.createdon,
                     f.createdby,
                     f.updatedon,
@@ -934,8 +984,6 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     ProcessStatus = reader.IsDBNull(reader.GetOrdinal("processstatus")) ? "Pending" : reader.GetString(reader.GetOrdinal("processstatus")),
                     MetaJson = reader.IsDBNull(reader.GetOrdinal("meta")) ? null : reader.GetString(reader.GetOrdinal("meta")),
                     OcrText = reader.IsDBNull(reader.GetOrdinal("ocrtext")) ? null : reader.GetString(reader.GetOrdinal("ocrtext")),
-                    //FileBytes = reader.IsDBNull(reader.GetOrdinal("filebytes")) ? Array.Empty<byte>() : (byte[])reader["filebytes"],
-                    FileBytes = reader.IsDBNull(reader.GetOrdinal("filebytes")) ? Array.Empty<byte>() : (byte[])reader["filebytes"],
                     OcrJsonPath = reader.IsDBNull(reader.GetOrdinal("ocrjsonpath")) ? null : reader.GetString(reader.GetOrdinal("ocrjsonpath")),
                     CreatedOn = reader.GetDateTime(reader.GetOrdinal("createdon")),
                     CreatedBy = reader.IsDBNull(reader.GetOrdinal("createdby")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("createdby")),

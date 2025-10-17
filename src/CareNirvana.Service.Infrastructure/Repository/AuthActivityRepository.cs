@@ -442,8 +442,9 @@ namespace CareNirvana.Service.Infrastructure.Repository
             const string lineSql = @"
                 SELECT id, activityid, decisionlineid, servicecode, description, fromdate, todate,
                        requested, approved, denied, initialrecommendation,
-                       status, mddecision, mdnotes, reviewedbyuserid, reviewedon, updatedon, version
-                FROM authactivityline
+                       status, mddecision, mdnotes, reviewedbyuserid, reviewedon, aal.updatedon, version, aa.comment
+                FROM authactivityline aal
+				JOIN authactivity aa on aa.authactivityid = aal.activityid
                 WHERE activityid = @activityid
                 ORDER BY id;";
 
@@ -475,7 +476,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                             ReviewedByUserId = lr["reviewedbyuserid"] as int?,
                             ReviewedOn = lr["reviewedon"] as DateTime?,
                             UpdatedOn = lr.GetDateTime(lr.GetOrdinal("updatedon")),
-                            Version = lr.GetInt64(lr.GetOrdinal("version"))
+                            Version = lr.GetInt64(lr.GetOrdinal("version")),
+                            Comment = lr["comment"] as string
                         });
                     }
                 }
@@ -489,32 +491,32 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
         private static string BuildRollupUpdateSql() => @"
                 WITH agg AS (
-                  SELECT
-                    activityid,
-                    COUNT(*) AS total,
-                    COUNT(*) FILTER (WHERE status = 'Completed') AS completed,
-                    COUNT(*) FILTER (WHERE status <> 'Completed') AS not_completed,
-                    COUNT(*) FILTER (WHERE mddecision = 'Approved' AND status = 'Completed') AS approved,
-                    COUNT(*) FILTER (WHERE mddecision = 'Denied'   AND status = 'Completed') AS denied
-                  FROM authactivityline
-                  WHERE activityid = @activityid
-                  GROUP BY activityid
-                )
-                UPDATE authactivity a
-                SET service_line_count    = agg.total,
-                    md_review_status      = CASE
-                                              WHEN agg.completed = agg.total THEN 'Completed'
-                                              WHEN agg.completed > 0 THEN 'InProgress'
-                                              ELSE 'Pending'
-                                            END,
-                    md_aggregate_decision = CASE
-                                              WHEN agg.completed = 0 THEN 'Pending'
-                                              WHEN agg.approved = agg.total THEN 'Approved'
-                                              WHEN agg.denied   = agg.total THEN 'Denied'
-                                              ELSE 'Mixed'
-                                            END
-                FROM agg
-                WHERE a.authactivityid = agg.activityid;";
+                      SELECT
+                        activityid,
+                        COUNT(*) AS total,
+                        COUNT(*) FILTER (WHERE status = 'Approved') AS completed,
+                        COUNT(*) FILTER (WHERE status <> 'Approved') AS not_approved,
+                        COUNT(*) FILTER (WHERE mddecision = 'Approved' AND status = 'Approved') AS approved,
+                        COUNT(*) FILTER (WHERE mddecision = 'Denied' AND status = 'Denied') AS denied_count
+                      FROM authactivityline
+                      WHERE activityid = @activityid
+                      GROUP BY activityid
+                    )
+                    UPDATE authactivity a
+                    SET service_line_count    = agg.total,
+                        md_review_status      = CASE
+                                                  WHEN agg.approved = agg.total THEN 'Approved'
+                                                  WHEN agg.approved > 0 THEN 'InProgress'
+                                                  ELSE 'Pending'
+                                                END,
+                        md_aggregate_decision = CASE
+                                                  WHEN agg.approved = 0 THEN 'Pending'
+                                                  WHEN agg.approved = agg.total THEN 'Approved'
+                                                  WHEN agg.denied_count = agg.total THEN 'Denied'
+                                                  ELSE 'Mixed'
+                                                END
+                    FROM agg
+                    WHERE a.authactivityid = agg.activityid;";
 
         private async Task RecomputeMdReviewRollupInTxAsync(NpgsqlConnection conn, NpgsqlTransaction tx, int activityId)
         {

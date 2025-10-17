@@ -12,11 +12,12 @@ public class UserController : ControllerBase
 {
     private readonly IUserService _userService;
     private readonly IConfiguration _configuration;
-
-    public UserController(IUserService userService, IConfiguration configuration)
+    private readonly IRecentlyAccessed _recentlyAccessedService;
+    public UserController(IUserService userService, IConfiguration configuration, IRecentlyAccessed recentlyAccessedService)
     {
         _userService = userService;
         _configuration = configuration;
+        _recentlyAccessedService = recentlyAccessedService;
     }
 
     [HttpPost("authenticate")]
@@ -54,7 +55,7 @@ public class UserController : ControllerBase
             Token = tokenString,
             UserName = user.UserName,
             Message = "Login successful!",
-            UserId = user.UserId   
+            UserId = user.UserId
         };
 
         return Ok(response); // Simplified return, CORS middleware will handle headers
@@ -101,5 +102,33 @@ public class UserController : ControllerBase
     {
         await _userService.DeleteAsync(id, deletedBy);
         return NoContent();
+    }
+
+    // 📜 Get recently accessed items for a user
+    [HttpGet("{userId}/recentlyaccessed")]
+    public async Task<ActionResult<IEnumerable<RecentlyAccessedView>>> GetRecentlyAccessed(
+        int userId,
+        [FromQuery] DateTime? fromUtc = null,
+        [FromQuery] DateTime? toUtc = null,
+        [FromQuery] int limit = 100,
+        [FromQuery] int offset = 0)
+    {
+        var items = await _recentlyAccessedService.GetByUserAsync(userId, fromUtc, toUtc, limit, offset);
+        return Ok(items);
+    }
+
+    [HttpPost("{userId}/recentlyaccessed")]
+    public async Task<ActionResult<int>> AddRecentlyAccessed(int userId, [FromBody] RecentlyAccessed item)
+    {
+        if (item.UserId != userId)
+            return BadRequest("User ID mismatch");
+        var id = await _recentlyAccessedService.InsertAsync(item);
+        return CreatedAtAction(nameof(GetRecentlyAccessed), new { userId }, id);
+    }
+    [HttpGet("{userId}/recentlyaccessed/counts")]
+    public async Task<ActionResult<Last24hCounts>> GetRecentlyAccessedCounts(int userId)
+    {
+        var counts = await _recentlyAccessedService.GetLast24hCountsAsync(userId);
+        return Ok(counts);
     }
 }
