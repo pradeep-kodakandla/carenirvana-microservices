@@ -7,14 +7,15 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Swashbuckle.AspNetCore.Filters;
 using System.Text;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers().AddJsonOptions(options =>
 {
-    options.JsonSerializerOptions.PropertyNamingPolicy = null;
+    options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
 });
-
+//JsonNamingPolicy.CamelCase
 var key = Encoding.ASCII.GetBytes("bP3!x5$G8@r9ZyL2WqT4!bN7eK1sD#uV");
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
@@ -65,6 +66,8 @@ builder.Services.AddScoped<IMemberProgramRepository, MemberProgramRepository>();
 builder.Services.AddScoped<IMemberAlertRepository, MemberAlertsRepository>();
 builder.Services.AddScoped<IMemberJourney, MemberJourneyRepository>();
 builder.Services.AddScoped<IRecentlyAccessed, RecentlyAccessedRepository>();
+builder.Services.AddScoped<IWorkBasket, WorkBasketRepository>();
+builder.Services.AddScoped<IWorkGroup, WorkGroupRepository>();
 
 var allowedOrigins = new[] {
     "http://localhost:4200",
