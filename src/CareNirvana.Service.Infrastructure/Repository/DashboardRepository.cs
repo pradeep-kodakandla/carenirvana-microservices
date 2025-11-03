@@ -121,7 +121,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                     null as lastcontact,
                                     null as nextcontact,
                                     ma.city,
-                                    mp.memberphonenumberid,
+                                    mp.phonenumber as memberphonenumberid,
                                     hie.level_map,
 	                                hie.enddate as enrollmentenddate,
                                     mc.startdate,
@@ -143,9 +143,9 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                         limit 1
                                      )
                                 left join memberaddress ma 
-                                  on ma.memberdetailsid = md.memberdetailsid
+                                  on ma.memberdetailsid = md.memberdetailsid and ma.isprimary = true
                                 left join memberphonenumber mp 
-                                  on mp.memberdetailsid = md.memberdetailsid
+                                  on mp.memberdetailsid = md.memberdetailsid and mp.ispreferred = true
                                 left join vw_member_enrollment_hierarchy_json hie
                                   on hie.memberdetailsid = md.memberdetailsid and hie.enddate > current_date
                                 left join lateral (
@@ -215,7 +215,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     NextContact = reader.IsDBNull(reader.GetOrdinal("nextcontact")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("nextcontact")),
 
                     City = reader.IsDBNull(reader.GetOrdinal("city")) ? null : reader.GetString(reader.GetOrdinal("city")),
-                    MemberPhoneNumberId = reader.IsDBNull(reader.GetOrdinal("memberphonenumberid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("memberphonenumberid")),
+                    MemberPhoneNumberId = reader.IsDBNull(reader.GetOrdinal("memberphonenumberid")) ? (string?)null : reader.GetString(reader.GetOrdinal("memberphonenumberid")),
                     LevelMap = reader.IsDBNull(reader.GetOrdinal("level_map")) ? null : reader.GetString(reader.GetOrdinal("level_map")),
                     EnrollmentEndDate = reader.IsDBNull(reader.GetOrdinal("enrollmentenddate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("enrollmentenddate")),
                     StartDate = reader.IsDBNull(reader.GetOrdinal("startdate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("startdate")),
@@ -250,7 +250,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                     null as lastcontact,
                                     null as nextcontact,
                                     ma.city,
-                                    mp.memberphonenumberid,
+                                    mp.phonenumber as memberphonenumberid,
                                     hie.level_map,
 	                                hie.enddate as enrollmentenddate,
                                     mc.startdate,
@@ -272,9 +272,9 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                         limit 1
                                      )
                                 left join memberaddress ma 
-                                  on ma.memberdetailsid = md.memberdetailsid
+                                  on ma.memberdetailsid = md.memberdetailsid and ma.isprimary = true
                                 left join memberphonenumber mp 
-                                  on mp.memberdetailsid = md.memberdetailsid
+                                  on mp.memberdetailsid = md.memberdetailsid and mp.ispreferred = true
                                 left join vw_member_enrollment_hierarchy_json hie
                                   on hie.memberdetailsid = md.memberdetailsid
                                 left join lateral (
@@ -344,7 +344,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     NextContact = reader.IsDBNull(reader.GetOrdinal("nextcontact")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("nextcontact")),
 
                     City = reader.IsDBNull(reader.GetOrdinal("city")) ? null : reader.GetString(reader.GetOrdinal("city")),
-                    MemberPhoneNumberId = reader.IsDBNull(reader.GetOrdinal("memberphonenumberid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("memberphonenumberid")),
+                    MemberPhoneNumberId = reader.IsDBNull(reader.GetOrdinal("memberphonenumberid")) ? (String?)null : reader.GetString(reader.GetOrdinal("memberphonenumberid")),
                     LevelMap = reader.IsDBNull(reader.GetOrdinal("level_map")) ? null : reader.GetString(reader.GetOrdinal("level_map")),
                     EnrollmentEndDate = reader.IsDBNull(reader.GetOrdinal("enrollmentenddate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("enrollmentenddate")),
                     StartDate = reader.IsDBNull(reader.GetOrdinal("startdate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("startdate")),

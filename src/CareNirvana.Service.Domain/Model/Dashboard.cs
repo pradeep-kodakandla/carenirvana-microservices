@@ -24,7 +24,7 @@ namespace CareNirvana.Service.Domain.Model
         public DateTime? NextContact { get; set; }   // currently NULL in SQL (reserved)
 
         public string? City { get; set; }
-        public int? MemberPhoneNumberId { get; set; }
+        public string? MemberPhoneNumberId { get; set; }
 
         public string? LevelMap { get; set; }        // JSON string
         public int AuthCount { get; set; }           // coalesce -> non-null
