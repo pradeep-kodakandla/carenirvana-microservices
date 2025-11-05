@@ -68,6 +68,7 @@ builder.Services.AddScoped<IMemberJourney, MemberJourneyRepository>();
 builder.Services.AddScoped<IRecentlyAccessed, RecentlyAccessedRepository>();
 builder.Services.AddScoped<IWorkBasket, WorkBasketRepository>();
 builder.Services.AddScoped<IWorkGroup, WorkGroupRepository>();
+builder.Services.AddScoped<IMessageRepository, MessageRepository>();
 
 var allowedOrigins = new[] {
     "http://localhost:4200",
