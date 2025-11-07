@@ -69,7 +69,7 @@ public class MessageController : ControllerBase
         //    return Forbid();
 
         var threadId = await _repo.EnsureThreadAsync(request.CreatedUserId, request.OtherUserId, request.MemberDetailsId);
-        var messageId = await _repo.CreateMessageAsync(request.CreatedUserId, threadId, request.Body, request.ParentMessageId);
+        var messageId = await _repo.CreateMessageAsync(request.CreatedUserId, threadId, request.Body, request.ParentMessageId, request.Subject);
         var thread = await _repo.GetThreadAsync(threadId);
 
         // Created with location of the thread

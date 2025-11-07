@@ -41,14 +41,14 @@ namespace CareNirvana.Service.Infrastructure.Repository
             return await conn.ExecuteScalarAsync<long>(sqlInsert, new { u1 = currentUserId, u2 = otherUserId, mid = memberDetailsId, creator = currentUserId });
         }
 
-        public async Task<long> CreateMessageAsync(int senderUserId, long threadId, string body, long? parentMessageId)
+        public async Task<long> CreateMessageAsync(int senderUserId, long threadId, string body, long? parentMessageId, string subject)
         {
             await using var conn = new NpgsqlConnection(_connectionString);
             const string sql = @"
-                INSERT INTO public.usermessage (threadid, parentmessageid, senderuserid, body)
-                VALUES (@tid, @pid, @sid, @body)
+                INSERT INTO public.usermessage (threadid, parentmessageid, senderuserid, body, subject)
+                VALUES (@tid, @pid, @sid, @body, @subject)
                 RETURNING messageid;";
-            return await conn.ExecuteScalarAsync<long>(sql, new { tid = threadId, pid = parentMessageId, sid = senderUserId, body });
+            return await conn.ExecuteScalarAsync<long>(sql, new { tid = threadId, pid = parentMessageId, sid = senderUserId, body, subject });
         }
 
         public async Task<int> UpdateMessageAsync(long messageId, int editorUserId, string newBody)
@@ -74,14 +74,35 @@ namespace CareNirvana.Service.Infrastructure.Repository
         public async Task<ThreadWithMessagesDto?> GetThreadAsync(long threadId)
         {
             await using var conn = new NpgsqlConnection(_connectionString);
-            const string threadSql = "SELECT * FROM public.usermessagethread WHERE threadid = @id;";
+            //const string threadSql = "SELECT * FROM public.usermessagethread WHERE threadid = @id;";
+            const string threadSql = @"
+                SELECT 
+                  t.threadid       AS ThreadId,
+                  t.user1id        AS User1Id,
+                  t.user2id        AS User2Id,
+                  t.memberdetailsid AS MemberDetailsId,
+                  su1.username     AS User1Name,
+                  su2.username     AS User2Name
+                FROM public.usermessagethread t
+                LEFT JOIN public.securityuser su1 ON su1.userid = t.user1id
+                LEFT JOIN public.securityuser su2 ON su2.userid = t.user2id
+                WHERE t.threadid = @id;";
             const string msgsSql = @"
-                SELECT messageid AS MessageId, threadid AS ThreadId, parentmessageid AS ParentMessageId,
-                       senderuserid AS SenderUserId, body AS Body, isdeleted AS IsDeleted,
-                       createdon AS CreatedOn, editedon AS EditedOn
-                FROM public.usermessage
-                WHERE threadid = @id
-                ORDER BY createdon ASC;";
+                  SELECT 
+                      um.messageid      AS MessageId,
+                      um.threadid       AS ThreadId,
+                      um.parentmessageid AS ParentMessageId,
+                      um.senderuserid   AS SenderUserId,
+                      um.body           AS Body,
+                      um.subject        AS Subject,     -- if you added this column
+                      um.isdeleted      AS IsDeleted,
+                      um.createdon      AS CreatedOn,
+                      um.editedon       AS EditedOn,
+                      su.username       AS UserName
+                  FROM public.usermessage um
+                  JOIN public.securityuser su ON su.userid = um.senderuserid
+                  WHERE um.threadid = @id
+                  ORDER BY um.createdon DESC;";
 
             using var multi = await conn.QueryMultipleAsync(threadSql + msgsSql, new { id = threadId });
             var thread = await multi.ReadFirstOrDefaultAsync<MessageThread>();
@@ -104,6 +125,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 ThreadId = thread.ThreadId,
                 User1Id = thread.User1Id,
                 User2Id = thread.User2Id,
+                User1Name = thread.User1Name, 
+                User2Name = thread.User2Name, 
                 MemberDetailsId = thread.MemberDetailsId,
                 Messages = roots
             };

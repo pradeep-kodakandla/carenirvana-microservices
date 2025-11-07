@@ -17,6 +17,8 @@ namespace CareNirvana.Service.Domain.Model
         public DateTimeOffset? UpdatedOn { get; set; }
         public int? UpdatedBy { get; set; }
         public bool ActiveFlag { get; set; }
+        public string? User1Name { get; set; }  
+        public string? User2Name { get; set; }  
     }
 
     public class UserMessage
@@ -26,6 +28,7 @@ namespace CareNirvana.Service.Domain.Model
         public long? ParentMessageId { get; set; }
         public int SenderUserId { get; set; }
         public string Body { get; set; } = "";
+        public string Subject { get; set; } = "";
         public bool IsDeleted { get; set; }
         public DateTimeOffset CreatedOn { get; set; }
         public DateTimeOffset? EditedOn { get; set; }
@@ -39,6 +42,7 @@ namespace CareNirvana.Service.Domain.Model
         public int? MemberDetailsId { get; set; }     // optional
         public long? ParentMessageId { get; set; }    // optional reply
         public string Body { get; set; } = "";
+        public string Subject { get; set; } = "";
     }
 
     public class UpdateMessageRequest
@@ -54,6 +58,8 @@ namespace CareNirvana.Service.Domain.Model
         public long? ParentMessageId { get; set; }
         public int SenderUserId { get; set; }
         public string Body { get; set; } = "";
+        public string Subject { get; set; } = "";
+        public string? UserName { get; set; }
         public bool IsDeleted { get; set; }
         public DateTimeOffset CreatedOn { get; set; }
         public DateTimeOffset? EditedOn { get; set; }
@@ -65,6 +71,9 @@ namespace CareNirvana.Service.Domain.Model
         public long ThreadId { get; set; }
         public int User1Id { get; set; }
         public int User2Id { get; set; }
+        public string? User1Name { get; set; }
+        public string? User2Name { get; set; }
+
         public int? MemberDetailsId { get; set; }
         public IEnumerable<MessageDto> Messages { get; set; } = Array.Empty<MessageDto>();
     }
