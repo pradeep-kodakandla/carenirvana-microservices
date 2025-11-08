@@ -141,4 +141,22 @@ public class DashBoardController : ControllerBase
             return NotFound(new { message = "Fax file not found." });
         return Ok(fax);
     }
+
+    [HttpPost("endmembercarestaff")]
+    public async Task<IActionResult> EndMemberCareStaffAsync([FromBody] EndMemberCareStaffRequest request)
+    {
+        if (request.MemberDetailsId <= 0)
+            return BadRequest(new { message = "Invalid MemberDetailsId." });
+        if (request.EndDate == default)
+            return BadRequest(new { message = "EndDate must be a valid date." });
+        var result = await _dashBoardService.EndMemberCareStaffAsync(request.MemberDetailsId, request.EndDate, request.CareStaffId, request.UpdatedBy, CancellationToken.None);
+        return Ok(new { affectedRows = result });
+    }
+    public class EndMemberCareStaffRequest
+    {
+        public int MemberDetailsId { get; set; }
+        public DateTime EndDate { get; set; }
+        public int? CareStaffId { get; set; }
+        public int? UpdatedBy { get; set; }
+    }
 }

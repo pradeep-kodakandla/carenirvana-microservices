@@ -23,6 +23,9 @@ namespace CareNirvana.Service.Application.Services
         public Task<int> UpdateFaxFileAsync(FaxFile fax) => _repo.UpdateFaxFileAsync(fax);
         public Task<(List<FaxFile> Items, int Total)> GetFaxFilesAsync(string? search, int page, int pageSize, string? status) => _repo.GetFaxFilesAsync(search, page, pageSize, status);
         public Task<FaxFile?> GetFaxFileByIdAsync(long faxId) => _repo.GetFaxFileByIdAsync(faxId);  
+
+        public Task<int> EndMemberCareStaffAsync(int memberDetailsId, DateTime endDate, int? careStaffId = null, int? updatedBy = null, CancellationToken ct = default) =>
+            _repo.EndMemberCareStaffAsync(memberDetailsId, endDate, careStaffId, updatedBy, ct);
     }
 
 }

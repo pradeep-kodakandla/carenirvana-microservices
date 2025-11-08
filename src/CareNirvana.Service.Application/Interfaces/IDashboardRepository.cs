@@ -22,5 +22,6 @@ namespace CareNirvana.Service.Application.Interfaces
         Task<int> UpdateFaxFileAsync(FaxFile fax);
         Task<(List<FaxFile> Items, int Total)> GetFaxFilesAsync(string? search, int page, int pageSize, string? status);
         Task<FaxFile?> GetFaxFileByIdAsync(long faxId);
+        Task<int> EndMemberCareStaffAsync(int memberDetailsId, DateTime endDate, int? careStaffId = null, int? updatedBy = null, CancellationToken ct = default);
     }
 }

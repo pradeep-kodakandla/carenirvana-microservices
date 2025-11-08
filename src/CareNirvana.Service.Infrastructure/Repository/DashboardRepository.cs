@@ -1,5 +1,6 @@
 ﻿using CareNirvana.Service.Application.Interfaces;
 using CareNirvana.Service.Domain.Model;
+using Dapper;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using NpgsqlTypes;
@@ -1038,6 +1039,49 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
             return null;
         }
+
+        public async Task<int> EndMemberCareStaffAsync(int memberDetailsId, DateTime endDate, int? careStaffId = null, int? updatedBy = null, CancellationToken ct = default)
+        {
+            const string sql = @"
+                    WITH target AS (
+                        SELECT mcs.membercarestaffid,
+                               GREATEST(@endDate::date, mcs.startdate)::date AS new_end
+                        FROM public.membercarestaff mcs
+                        WHERE mcs.memberdetailsid = @memberDetailsId
+                          AND (@careStaffId IS NULL OR mcs.userid = @careStaffId)
+                          AND COALESCE(mcs.activeflag, TRUE) = TRUE
+                          AND mcs.startdate <= @endDate::date
+                          AND (mcs.enddate IS NULL OR mcs.enddate > @endDate::date)
+                    ),
+                    updated AS (
+                        UPDATE public.membercarestaff m
+                        SET enddate    = t.new_end,
+                            activeflag = FALSE,
+                            updatedon  = NOW(),
+                            updatedby  = @updatedBy
+                        FROM target t
+                        WHERE m.membercarestaffid = t.membercarestaffid
+                        RETURNING 1
+                    )
+                    SELECT COUNT(*) AS affected FROM updated;";
+
+            //await using var conn = GetConnection();
+            using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+            return await conn.ExecuteScalarAsync<int>(new CommandDefinition(
+                sql,
+                new
+                {
+                    memberDetailsId,
+                    careStaffId,
+                    endDate = endDate.Date,
+                    updatedBy
+                },
+                cancellationToken: ct));
+        }
+
+
     }
+
 
 }
