@@ -63,7 +63,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                       ma.alertid                    AS AlertId,
                       ca.alertname                  AS CfgAlertName,
 
-                      ma.altersourceid              AS AlterSourceId,
+                      ma.alertsourceid              AS AlertSourceId,
                       src.name                      AS AlertSourceName,
                       src.code                      AS AlertSourceCode,
 
@@ -89,7 +89,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     FROM memberalert ma
                     LEFT JOIN cfgalert     ca ON ca.alertid        = ma.alertid
                     LEFT JOIN memberdetails md ON md.memberdetailsid = ma.memberdetailsid
-                    LEFT JOIN alert_source  src ON src.id          = ma.altersourceid
+                    LEFT JOIN alert_source  src ON src.id          = ma.alertsourceid
                     LEFT JOIN alert_type    typ ON typ.id          = ma.alerttypeid
                     LEFT JOIN alert_status  sts ON sts.id          = ma.alertstatusid
                     WHERE

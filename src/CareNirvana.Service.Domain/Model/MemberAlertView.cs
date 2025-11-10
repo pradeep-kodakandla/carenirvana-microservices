@@ -15,7 +15,7 @@ namespace CareNirvana.Service.Domain.Model
         public int? AlertId { get; set; }
         public string? CfgAlertName { get; set; }
 
-        public int? AlterSourceId { get; set; }
+        public int? AlertSourceId { get; set; }
         public string? AlertSourceName { get; set; }
         public string? AlertSourceCode { get; set; }
 
