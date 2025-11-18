@@ -78,6 +78,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
             SELECT
                 (SELECT COUNT(DISTINCT m.memberdetailsid)  FROM public.membercarestaff m   WHERE m.userid = @userId AND COALESCE(m.activeflag, true) = true) AS mymembercount,
                 (SELECT COUNT(*) FROM public.authdetail a WHERE a.authassignedto = @userId) AS authcount,
+                (SELECT COUNT(*) FROM public.memberactivity a WHERE a.referto is null) AS requestcount,
                 (SELECT COUNT(*) FROM public.authactivity aa WHERE aa.referto = @userId and aa.service_line_count=0) AS activitycount,
                 (SELECT COUNT(*) FROM public.authactivity aa WHERE aa.referto = @userId and aa.service_line_count<>0 and md_review_status <> 'Approved') AS wqcount,
                 (SELECT COUNT(*) FROM public.faxfiles ) AS faxcount
@@ -95,7 +96,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     AuthCount = reader.GetInt32(reader.GetOrdinal("authcount")),
                     ActivityCount = reader.GetInt32(reader.GetOrdinal("activitycount")),
                     // Remaining set to 0 for now
-                    RequestCount = 0,
+                    RequestCount = reader.GetInt32(reader.GetOrdinal("requestcount")),
                     ComplaintCount = 0,
                     FaxCount = reader.GetInt32(reader.GetOrdinal("faxcount")),
                     WQCount = reader.GetInt32(reader.GetOrdinal("wqcount"))
@@ -491,9 +492,9 @@ namespace CareNirvana.Service.Infrastructure.Repository
             return results;
         }
 
-        public async Task<List<AuthActivityItem>> GetPendingAuthActivitiesAsync(int? userId = null)
+        public async Task<List<ActivityItem>> GetPendingActivitiesAsync(int? userId = null)
         {
-            const string sql = @"
+            const string sql = @" SELECT * FROM (
                 select distinct
                     'UM' as module,
                     md.firstname,
@@ -524,9 +525,45 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 ) at on true
                 where aa.service_line_count = 0
                   and (@userId is null or aa.referto = @userId)
-                order by aa.createdon desc;";
 
-            var results = new List<AuthActivityItem>();
+                UNION ALL
+
+                --Member activities(no authnumber, but same ActivityItem shape)
+                SELECT DISTINCT
+                    'CM' AS module,
+                    md.firstname,
+                    md.lastname,
+                    md.memberid,
+                    md.memberdetailsid,
+                    ma.createdon,
+                    ma.activitytypeid,
+                    at2.activitytype,
+                    ma.referto,
+                    su2.username,
+                    ma.followupdatetime,
+                    ma.duedate,
+                    ma.statusid,
+                    'Pending' AS status,
+                    NULL AS authnumber
+                FROM memberactivity ma
+                JOIN memberdetails md ON md.memberdetailsid = ma.memberdetailsid
+                JOIN securityuser su2 ON su2.userid = ma.referto
+                LEFT JOIN LATERAL(
+                    SELECT elem->> 'activityType' AS activitytype
+                    FROM cfgadmindata cad,
+                         jsonb_array_elements(cad.jsoncontent::jsonb->'activitytype') elem
+                    WHERE(elem->> 'id')::int = ma.activitytypeid
+                      AND cad.module = 'UM'
+                    LIMIT 1
+                ) at2 ON TRUE
+                WHERE ma.referto IS NOT NULL
+                  AND ma.deletedon IS NULL
+                  AND COALESCE(ma.activeflag, TRUE) = TRUE
+                  AND(@userId IS NULL OR ma.referto = @userId)
+            ) allacts
+            ORDER BY allacts.createdon DESC; ";
+
+            var results = new List<ActivityItem>();
 
             using var conn = new NpgsqlConnection(_connectionString);
             await conn.OpenAsync();
@@ -539,7 +576,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
             while (await reader.ReadAsync())
             {
-                var item = new AuthActivityItem
+                var item = new ActivityItem
                 {
                     Module = reader.IsDBNull(reader.GetOrdinal("module")) ? null : reader.GetString(reader.GetOrdinal("module")),
                     FirstName = reader.IsDBNull(reader.GetOrdinal("firstname")) ? null : reader.GetString(reader.GetOrdinal("firstname")),
@@ -568,7 +605,198 @@ namespace CareNirvana.Service.Infrastructure.Repository
             return results;
         }
 
-        public async Task<List<AuthActivityItem>> GetPendingWQAsync(int? userId = null)
+        public async Task<List<ActivityRequestItem>> GetRequestActivitiesAsync(int? userId = null)
+        {
+            const string sql = @"
+                    SELECT distinct
+                    'CM' AS module,
+                    md.firstname,
+                    md.lastname,
+                    md.memberid,
+                    md.memberdetailsid,
+                    ma.createdon,
+                    ma.activitytypeid,
+                    at.activitytype,
+                    NULL::int  AS referto,
+                    NULL::text AS username,
+                    ma.followupdatetime,
+                    ma.duedate,
+                    ma.statusid,
+                    'Request' AS status,
+                    NULL::text AS authnumber,
+                    COALESCE(rj.rejectedcount, 0)                    AS rejectedcount,
+                    COALESCE(rj.rejecteduserids, ARRAY[]::integer[]) AS rejecteduserids,
+                    wg.workgroupid                                  AS workgroupid,
+                    wg.workgroupname                                 AS workgroupname,
+                    wb.workbasketid                                  AS workbasketid,
+                    wb.workbasketname                                 AS workbasketname
+                        FROM cfguserworkgroup cug
+                        JOIN cfgworkgroupworkbasket cww
+	                        ON cww.workgroupworkbasketid = cug.workgroupworkbasketid
+                        JOIN cfgworkgroup wg
+                          ON wg.workgroupid = cww.workgroupid
+                        JOIN cfgworkbasket wb
+                          ON wb.workbasketid = cww.workbasketid
+                        JOIN memberactivityworkgroup maw
+                          ON maw.workgroupworkbasketid = cug.workgroupworkbasketid
+                        JOIN memberactivity ma
+                          ON ma.memberactivityid = maw.memberactivityid
+                        JOIN memberdetails md
+                          ON md.memberdetailsid = ma.memberdetailsid
+                        LEFT JOIN LATERAL (
+                            SELECT elem->>'activityType' AS activitytype
+                            FROM cfgadmindata cad,
+                                 jsonb_array_elements(cad.jsoncontent::jsonb->'activitytype') elem
+                            WHERE (elem->>'id')::int = ma.activitytypeid
+                              AND cad.module = 'UM'
+                            LIMIT 1
+                        ) at ON TRUE
+                        LEFT JOIN (
+                            SELECT
+                                memberactivityworkgroupid,
+                                COUNT(*) FILTER (
+                                    WHERE actiontype = 'Rejected'
+                                      AND COALESCE(activeflag, TRUE) = TRUE
+                                ) AS rejectedcount,
+                                ARRAY_AGG(userid) FILTER (
+                                    WHERE actiontype = 'Rejected'
+                                      AND COALESCE(activeflag, TRUE) = TRUE
+                                ) AS rejecteduserids
+                            FROM memberactivityworkgroupaction
+                            GROUP BY memberactivityworkgroupid
+                        ) rj
+                          ON rj.memberactivityworkgroupid = maw.memberactivityworkgroupid
+                        WHERE cug.userid = @userId
+                          AND COALESCE(cug.activeflag, TRUE) = TRUE
+                          AND COALESCE(maw.activeflag, TRUE) = TRUE
+                          AND ma.referto IS NULL          -- still in pool (not accepted)
+                          AND ma.isworkbasket = TRUE      -- work basket activity
+                          AND ma.deletedon IS NULL
+                          AND COALESCE(ma.activeflag, TRUE) = TRUE
+                        ORDER BY ma.createdon DESC;";
+
+            var results = new List<ActivityRequestItem>();
+
+            await using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            if (userId.HasValue)
+                cmd.Parameters.AddWithValue("@userId", userId.Value);
+            else
+                cmd.Parameters.AddWithValue("@userId", DBNull.Value);
+
+            await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SequentialAccess);
+
+            while (await reader.ReadAsync())
+            {
+                var item = new ActivityRequestItem
+                {
+                    Module = reader.IsDBNull(reader.GetOrdinal("module")) ? null : reader.GetString(reader.GetOrdinal("module")),
+                    FirstName = reader.IsDBNull(reader.GetOrdinal("firstname")) ? null : reader.GetString(reader.GetOrdinal("firstname")),
+                    LastName = reader.IsDBNull(reader.GetOrdinal("lastname")) ? null : reader.GetString(reader.GetOrdinal("lastname")),
+                    MemberId = reader.IsDBNull(reader.GetOrdinal("memberid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("memberid")),
+                    MemberDetailsId = reader.IsDBNull(reader.GetOrdinal("memberdetailsid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("memberdetailsid")),
+                    CreatedOn = reader.IsDBNull(reader.GetOrdinal("createdon")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("createdon")),
+                    ActivityTypeId = reader.IsDBNull(reader.GetOrdinal("activitytypeid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("activitytypeid")),
+                    ActivityType = reader.IsDBNull(reader.GetOrdinal("activitytype")) ? null : reader.GetString(reader.GetOrdinal("activitytype")),
+                    // For request items, there is no assigned user yet
+                    ReferredTo = reader.IsDBNull(reader.GetOrdinal("referto")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("referto")),
+                    UserName = reader.IsDBNull(reader.GetOrdinal("username")) ? null : reader.GetString(reader.GetOrdinal("username")),
+                    FollowUpDateTime = reader.IsDBNull(reader.GetOrdinal("followupdatetime")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("followupdatetime")),
+                    DueDate = reader.IsDBNull(reader.GetOrdinal("duedate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("duedate")),
+                    StatusId = reader.IsDBNull(reader.GetOrdinal("statusid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("statusid")),
+                    Status = reader.IsDBNull(reader.GetOrdinal("status")) ? null : reader.GetString(reader.GetOrdinal("status")),
+                    AuthNumber = reader.IsDBNull(reader.GetOrdinal("authnumber")) ? null : reader.GetString(reader.GetOrdinal("authnumber")),
+                    RejectedCount = reader.IsDBNull(reader.GetOrdinal("rejectedcount")) ? 0 : reader.GetInt32(reader.GetOrdinal("rejectedcount")),
+                    RejectedUserIds = !reader.IsDBNull(reader.GetOrdinal("rejecteduserids")) ? reader.GetFieldValue<int[]>(reader.GetOrdinal("rejecteduserids")) : Array.Empty<int>(),
+                    WorkGroupId = reader.IsDBNull(reader.GetOrdinal("workgroupid")) ? 0 : reader.GetInt32(reader.GetOrdinal("workgroupid")),
+                    WorkGroupName = reader.IsDBNull(reader.GetOrdinal("workgroupname")) ? null : reader.GetString(reader.GetOrdinal("workgroupname")),
+                    WorkBasketId = reader.IsDBNull(reader.GetOrdinal("workbasketid")) ? 0 : reader.GetInt32(reader.GetOrdinal("workbasketid")),
+                    WorkBasketName = reader.IsDBNull(reader.GetOrdinal("workbasketname")) ? null : reader.GetString(reader.GetOrdinal("workbasketname"))
+                };
+                results.Add(item);
+            }
+            return results;
+        }
+
+        public async Task<List<UserWorkGroupWorkBasketItem>> GetUserWorkGroupWorkBasketsAsync(int userId)
+        {
+            const string sql = @"
+                SELECT
+                cug0.userid,
+                su0.username,
+                cug0.workgroupworkbasketid,
+                wgw.workgroupid,
+                wg.workgroupname,
+                wgw.workbasketid,
+                wb.workbasketname,
+                COALESCE(cug0.activeflag, TRUE) AS activeflag,
+                COALESCE(agg.assigneduserids, ARRAY[]::integer[])   AS assigneduserids,
+                COALESCE(agg.assignedusernames, ARRAY[]::text[])    AS assignedusernames
+                    FROM cfguserworkgroup cug0
+                    JOIN securityuser su0
+                      ON su0.userid = cug0.userid
+                    JOIN cfgworkgroupworkbasket wgw
+                      ON wgw.workgroupworkbasketid = cug0.workgroupworkbasketid
+                    JOIN cfgworkgroup wg
+                      ON wg.workgroupid = wgw.workgroupid
+                    JOIN cfgworkbasket wb
+                      ON wb.workbasketid = wgw.workbasketid
+                    LEFT JOIN (
+                        SELECT
+                            cug.workgroupworkbasketid,
+                            ARRAY_AGG(cug.userid) FILTER (WHERE COALESCE(cug.activeflag, TRUE) = TRUE)
+                                AS assigneduserids,
+                            ARRAY_AGG(su.username) FILTER (WHERE COALESCE(cug.activeflag, TRUE) = TRUE)
+                                AS assignedusernames
+                        FROM cfguserworkgroup cug
+                        JOIN securityuser su
+                          ON su.userid = cug.userid
+                        GROUP BY cug.workgroupworkbasketid
+                    ) agg
+                      ON agg.workgroupworkbasketid = cug0.workgroupworkbasketid
+                    WHERE cug0.userid = @userId
+                      AND COALESCE(cug0.activeflag, TRUE) = TRUE
+                      AND COALESCE(wgw.activeflag, TRUE) = TRUE
+                      AND COALESCE(wg.activeflag, TRUE) = TRUE
+                      AND COALESCE(wb.activeflag, TRUE) = TRUE
+                    ORDER BY wg.workgroupname, wb.workbasketname;";
+
+            var results = new List<UserWorkGroupWorkBasketItem>();
+
+            await using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@userId", userId);
+
+            await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SequentialAccess);
+
+            while (await reader.ReadAsync())
+            {
+                var item = new UserWorkGroupWorkBasketItem
+                {
+                    UserId = reader.IsDBNull(reader.GetOrdinal("userid")) ? 0 : reader.GetInt32(reader.GetOrdinal("userid")),
+                    UserFullName = reader.IsDBNull(reader.GetOrdinal("userfullname")) ? null : reader.GetString(reader.GetOrdinal("userfullname")),
+                    WorkGroupWorkBasketId = reader.IsDBNull(reader.GetOrdinal("workgroupworkbasketid")) ? 0 : reader.GetInt32(reader.GetOrdinal("workgroupworkbasketid")),
+                    WorkGroupId = reader.IsDBNull(reader.GetOrdinal("workgroupid")) ? 0 : reader.GetInt32(reader.GetOrdinal("workgroupid")),
+                    WorkGroupName = reader.IsDBNull(reader.GetOrdinal("workgroupname")) ? null : reader.GetString(reader.GetOrdinal("workgroupname")),
+                    WorkBasketId = reader.IsDBNull(reader.GetOrdinal("workbasketid")) ? 0 : reader.GetInt32(reader.GetOrdinal("workbasketid")),
+                    WorkBasketName = reader.IsDBNull(reader.GetOrdinal("workbasketname")) ? null : reader.GetString(reader.GetOrdinal("workbasketname")),
+                    ActiveFlag = !reader.IsDBNull(reader.GetOrdinal("activeflag")) && reader.GetBoolean(reader.GetOrdinal("activeflag")),
+                    AssignedUserIds = !reader.IsDBNull(reader.GetOrdinal("assigneduserids")) ? reader.GetFieldValue<int[]>(reader.GetOrdinal("assigneduserids")) : Array.Empty<int>(),
+                    AssignedUserNames = !reader.IsDBNull(reader.GetOrdinal("assignedusernames")) ? reader.GetFieldValue<string[]>(reader.GetOrdinal("assignedusernames")) : Array.Empty<string>()
+                };
+
+                results.Add(item);
+            }
+
+            return results;
+        }
+
+
+        public async Task<List<ActivityItem>> GetPendingWQAsync(int? userId = null)
         {
             const string sql = @"
                 select distinct
@@ -605,7 +833,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                   and (@userId is null or aa.referto = @userId)
                 order by aa.createdon desc;";
 
-            var results = new List<AuthActivityItem>();
+            var results = new List<ActivityItem>();
 
             using var conn = new NpgsqlConnection(_connectionString);
             await conn.OpenAsync();
@@ -618,7 +846,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
             while (await reader.ReadAsync())
             {
-                var item = new AuthActivityItem
+                var item = new ActivityItem
                 {
                     Module = reader.IsDBNull(reader.GetOrdinal("module")) ? null : reader.GetString(reader.GetOrdinal("module")),
                     FirstName = reader.IsDBNull(reader.GetOrdinal("firstname")) ? null : reader.GetString(reader.GetOrdinal("firstname")),

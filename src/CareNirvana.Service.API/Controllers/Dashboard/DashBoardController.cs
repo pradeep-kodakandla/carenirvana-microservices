@@ -54,10 +54,10 @@ public class DashBoardController : ControllerBase
             return NotFound(new { message = "No authorization details found for this user." });
         return Ok(result);
     }
-    [HttpGet("pendingauthactivities/{userId?}")]
-    public async Task<IActionResult> GetPendingAuthActivitiesAsync(int? userId = null)
+    [HttpGet("pendingactivities/{userId?}")]
+    public async Task<IActionResult> GetPendingActivitiesAsync(int? userId = null)
     {
-        var result = await _dashBoardService.GetPendingAuthActivitiesAsync(userId);
+        var result = await _dashBoardService.GetPendingActivitiesAsync(userId);
         if (result == null || result.Count == 0)
             return NotFound(new { message = "No pending authorization activities found." });
         return Ok(result);
@@ -158,5 +158,23 @@ public class DashBoardController : ControllerBase
         public DateTime EndDate { get; set; }
         public int? CareStaffId { get; set; }
         public int? UpdatedBy { get; set; }
+    }
+
+    [HttpGet("userworkgroups/{userId}")]
+    public async Task<IActionResult> GetUserWorkGroupWorkBasketsAsync(int userId)
+    {
+        var result = await _dashBoardService.GetUserWorkGroupWorkBasketsAsync(userId);
+        if (result == null || result.Count == 0)
+            return NotFound(new { message = "No work groups or work baskets found for this user." });
+        return Ok(result);
+    }
+
+    [HttpGet("requestactivities/{userId?}")]
+    public async Task<IActionResult> GetRequestActivitiesAsync(int? userId = null)
+    {
+        var result = await _dashBoardService.GetRequestActivitiesAsync(userId);
+        if (result == null || result.Count == 0)
+            return NotFound(new { message = "No request activities found." });
+        return Ok(result);
     }
 }

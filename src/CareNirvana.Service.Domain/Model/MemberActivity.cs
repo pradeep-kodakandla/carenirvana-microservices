@@ -65,11 +65,11 @@ namespace CareNirvana.Service.Domain.Model
         public int? PriorityId { get; set; }
         public DateTime? FollowUpDateTime { get; set; }
         public DateTime? DueDate { get; set; }
-        public string Comment { get; set; }
+        public string? Comment { get; set; }
         public int? StatusId { get; set; }
 
         public int RejectedCount { get; set; }
-        public int[] RejectedUserIds { get; set; }
+        public int[]? RejectedUserIds { get; set; }
     }
 
     public class MemberActivityCurrentItem

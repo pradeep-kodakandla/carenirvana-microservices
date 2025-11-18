@@ -68,7 +68,7 @@ namespace CareNirvana.Service.Domain.Model
         public string? MemberName { get; set; }
     }
 
-    public class AuthActivityItem
+    public class ActivityItem
     {
         public string Module { get; set; }                 // 'UM'
         public string FirstName { get; set; }
@@ -91,6 +91,35 @@ namespace CareNirvana.Service.Domain.Model
         public string? Comments { get; set; }
         public string? AuthNumber { get; set; }
         public string? AuthActivityId { get; set; }
+    }
+
+    public class ActivityRequestItem : ActivityItem
+    {
+        public int RejectedCount { get; set; }
+        public int[] RejectedUserIds { get; set; } = Array.Empty<int>();
+        public int WorkGroupId { get; set; }
+        public string WorkGroupName { get; set; }
+        public int WorkBasketId { get; set; }
+        public string WorkBasketName { get; set; }
+    }
+
+    public class UserWorkGroupWorkBasketItem
+    {
+        public int UserId { get; set; }
+        public string UserFullName { get; set; }
+
+        public int WorkGroupWorkBasketId { get; set; }
+
+        public int WorkGroupId { get; set; }
+        public string WorkGroupName { get; set; }
+
+        public int WorkBasketId { get; set; }
+        public string WorkBasketName { get; set; }
+
+        public bool ActiveFlag { get; set; }
+
+        public int[] AssignedUserIds { get; set; } = Array.Empty<int>();
+        public string[] AssignedUserNames { get; set; } = Array.Empty<string>();
     }
 
     public class AuthActivityLine
