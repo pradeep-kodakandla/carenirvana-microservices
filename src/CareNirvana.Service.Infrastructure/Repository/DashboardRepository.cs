@@ -629,7 +629,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     wg.workgroupid                                  AS workgroupid,
                     wg.workgroupname                                 AS workgroupname,
                     wb.workbasketid                                  AS workbasketid,
-                    wb.workbasketname                                 AS workbasketname
+                    wb.workbasketname                                 AS workbasketname,
+                    maw.memberactivityworkgroupid AS memberactivityworkgroupid
                         FROM cfguserworkgroup cug
                         JOIN cfgworkgroupworkbasket cww
 	                        ON cww.workgroupworkbasketid = cug.workgroupworkbasketid
@@ -666,15 +667,14 @@ namespace CareNirvana.Service.Infrastructure.Repository
                             GROUP BY memberactivityworkgroupid
                         ) rj
                           ON rj.memberactivityworkgroupid = maw.memberactivityworkgroupid
-                        WHERE cug.userid = @userId
-                          AND COALESCE(cug.activeflag, TRUE) = TRUE
+                        WHERE  COALESCE(cug.activeflag, TRUE) = TRUE
                           AND COALESCE(maw.activeflag, TRUE) = TRUE
                           AND ma.referto IS NULL          -- still in pool (not accepted)
                           AND ma.isworkbasket = TRUE      -- work basket activity
                           AND ma.deletedon IS NULL
                           AND COALESCE(ma.activeflag, TRUE) = TRUE
                         ORDER BY ma.createdon DESC;";
-
+            //cug.userid = @userId   AND
             var results = new List<ActivityRequestItem>();
 
             await using var conn = new NpgsqlConnection(_connectionString);
@@ -713,7 +713,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     WorkGroupId = reader.IsDBNull(reader.GetOrdinal("workgroupid")) ? 0 : reader.GetInt32(reader.GetOrdinal("workgroupid")),
                     WorkGroupName = reader.IsDBNull(reader.GetOrdinal("workgroupname")) ? null : reader.GetString(reader.GetOrdinal("workgroupname")),
                     WorkBasketId = reader.IsDBNull(reader.GetOrdinal("workbasketid")) ? 0 : reader.GetInt32(reader.GetOrdinal("workbasketid")),
-                    WorkBasketName = reader.IsDBNull(reader.GetOrdinal("workbasketname")) ? null : reader.GetString(reader.GetOrdinal("workbasketname"))
+                    WorkBasketName = reader.IsDBNull(reader.GetOrdinal("workbasketname")) ? null : reader.GetString(reader.GetOrdinal("workbasketname")),
+                    MemberActivityWorkGroupId = reader.IsDBNull(reader.GetOrdinal("memberactivityworkgroupid")) ? 0 : reader.GetInt32(reader.GetOrdinal("memberactivityworkgroupid"))
                 };
                 results.Add(item);
             }
@@ -778,7 +779,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 var item = new UserWorkGroupWorkBasketItem
                 {
                     UserId = reader.IsDBNull(reader.GetOrdinal("userid")) ? 0 : reader.GetInt32(reader.GetOrdinal("userid")),
-                    UserFullName = reader.IsDBNull(reader.GetOrdinal("userfullname")) ? null : reader.GetString(reader.GetOrdinal("userfullname")),
+                    UserFullName = reader.IsDBNull(reader.GetOrdinal("username")) ? null : reader.GetString(reader.GetOrdinal("username")),
                     WorkGroupWorkBasketId = reader.IsDBNull(reader.GetOrdinal("workgroupworkbasketid")) ? 0 : reader.GetInt32(reader.GetOrdinal("workgroupworkbasketid")),
                     WorkGroupId = reader.IsDBNull(reader.GetOrdinal("workgroupid")) ? 0 : reader.GetInt32(reader.GetOrdinal("workgroupid")),
                     WorkGroupName = reader.IsDBNull(reader.GetOrdinal("workgroupname")) ? null : reader.GetString(reader.GetOrdinal("workgroupname")),

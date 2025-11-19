@@ -101,6 +101,7 @@ namespace CareNirvana.Service.Domain.Model
         public string WorkGroupName { get; set; }
         public int WorkBasketId { get; set; }
         public string WorkBasketName { get; set; }
+        public int MemberActivityWorkGroupId { get; set; }
     }
 
     public class UserWorkGroupWorkBasketItem
