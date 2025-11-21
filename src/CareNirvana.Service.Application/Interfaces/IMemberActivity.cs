@@ -26,6 +26,7 @@ namespace CareNirvana.Service.Application.Interfaces
             DateTime? toFollowUpDate,
             int? memberDetailsId,
             CancellationToken cancellationToken);
+        Task<MemberActivityDetailItem?> GetMemberActivityDetailAsync(int memberActivityId, CancellationToken cancellationToken = default);
     }
 }
 

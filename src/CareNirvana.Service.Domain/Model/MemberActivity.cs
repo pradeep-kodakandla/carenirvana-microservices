@@ -86,4 +86,34 @@ namespace CareNirvana.Service.Domain.Model
         public DateTime? PerformedDateTime { get; set; }
         public int? PerformedBy { get; set; }
     }
+   
+    public class MemberActivityDetailItem
+    {
+        public int MemberActivityId { get; set; }
+        public int MemberDetailsId { get; set; }
+        public int? ActivityTypeId { get; set; }
+        public int? PriorityId { get; set; }
+        public DateTime? FollowUpDateTime { get; set; }
+        public DateTime? DueDate { get; set; }
+        public string? Comment { get; set; }
+        public int? StatusId { get; set; }
+        public int? ReferTo { get; set; }
+        public bool IsWorkBasket { get; set; }
+
+        public int? MemberActivityWorkGroupId { get; set; }
+        public int? WorkGroupWorkBasketId { get; set; }
+
+        // NEW: All users tied to this workgroup-workbasket and their status
+        public List<MemberActivityAssignedUserItem> AssignedUsers { get; set; }
+            = new List<MemberActivityAssignedUserItem>();
+    }
+
+
+    public class MemberActivityAssignedUserItem
+    {
+        public int UserId { get; set; }
+        public string? UserFullName { get; set; }   // optional, if you join to user table
+        public string? Status { get; set; }         // "Accepted", "Rejected", "Request"
+    }
+
 }

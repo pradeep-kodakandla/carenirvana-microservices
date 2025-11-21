@@ -3,6 +3,7 @@ using CareNirvana.Service.Domain.Model;
 using Dapper;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
+using System.Collections.Generic;
 using System.Data;
 using System.Text;
 
@@ -654,6 +655,98 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     parameters,
                     cancellationToken: cancellationToken
                 ));
+        }
+
+        public async Task<MemberActivityDetailItem?> GetMemberActivityDetailAsync(int memberActivityId, CancellationToken cancellationToken = default)
+        {
+            const string sql = @"
+                SELECT
+            -- activity
+                ma.memberactivityid          AS MemberActivityId,
+                ma.memberdetailsid           AS MemberDetailsId,
+                ma.activitytypeid            AS ActivityTypeId,
+                ma.priorityid                AS PriorityId,
+                ma.followupdatetime          AS FollowUpDateTime,
+                ma.duedate                   AS DueDate,
+                ma.comment                   AS Comment,
+                ma.statusid                  AS StatusId,
+                ma.referto                   AS ReferTo,
+                COALESCE(ma.isworkbasket, false) AS IsWorkBasket,
+
+                -- workbasket info (if any)
+                maw.memberactivityworkgroupid AS MemberActivityWorkGroupId,
+                maw.workgroupworkbasketid     AS WorkGroupWorkBasketId,
+
+                -- assigned users from cfguserworkgroup
+                cuwg.userid                  AS UserId,
+
+                -- join to your user table if you want names; adjust table/columns as needed
+                u.username                   AS UserFullName,
+
+                -- derived status per user
+                CASE
+                    WHEN mwa.actiontype = 'Rejected' THEN 'Rejected'
+                    WHEN mwa.actiontype = 'Accepted' THEN 'Accepted'
+                    ELSE 'Request'
+                END                          AS Status
+                FROM public.memberactivity ma
+                LEFT JOIN public.memberactivityworkgroup maw
+                    ON maw.memberactivityid = ma.memberactivityid
+                  --AND (maw.activeflag IS DISTINCT FROM false)
+
+                -- all assigned users for this workgroup-workbasket
+                LEFT JOIN public.cfguserworkgroup cuwg
+                    ON cuwg.workgroupworkbasketid = maw.workgroupworkbasketid
+                   AND (cuwg.activeflag IS DISTINCT FROM false)
+
+                -- any action those users took on this workgroup activity
+                LEFT JOIN public.memberactivityworkgroupaction mwa
+                    ON mwa.memberactivityworkgroupid = maw.memberactivityworkgroupid
+                   AND mwa.userid = cuwg.userid
+                   AND (mwa.activeflag IS DISTINCT FROM false)
+
+                -- user table – change to your actual name (e.g., appuser, sysuser)
+                LEFT JOIN public.securityuser u
+                    ON u.userid = cuwg.userid
+
+                WHERE ma.memberactivityid = @MemberActivityId
+                  AND ma.deletedon IS NULL; ";
+
+            await using var conn = GetConnection();
+
+            var lookup = new Dictionary<int, MemberActivityDetailItem>();
+
+            var result = await conn.QueryAsync<MemberActivityDetailItem, MemberActivityAssignedUserItem, MemberActivityDetailItem>(
+                new CommandDefinition(
+                    sql,
+                    new { MemberActivityId = memberActivityId },
+                    cancellationToken: cancellationToken
+                ),
+                (activity, user) =>
+                {
+                    if (!lookup.TryGetValue(activity.MemberActivityId, out var agg))
+                    {
+                        agg = activity;
+                        agg.AssignedUsers = new List<MemberActivityAssignedUserItem>();
+                        lookup.Add(agg.MemberActivityId, agg);
+                    }
+
+                    // For non-workbasket activities maw will be null, so no users
+                    if (user != null && user.UserId != 0)
+                    {
+                        // Avoid duplicates just in case
+                        if (!agg.AssignedUsers.Any(x => x.UserId == user.UserId))
+                        {
+                            agg.AssignedUsers.Add(user);
+                        }
+                    }
+
+                    return agg;
+                },
+                splitOn: "UserId"
+            );
+
+            return lookup.Values.FirstOrDefault();
         }
 
         #endregion

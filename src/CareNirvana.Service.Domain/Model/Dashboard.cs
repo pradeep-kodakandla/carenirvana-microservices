@@ -90,6 +90,7 @@ namespace CareNirvana.Service.Domain.Model
         public string Status { get; set; }                 // 'Pending'
         public string? Comments { get; set; }
         public string? AuthNumber { get; set; }
+        public int? ActivityId { get; set; }
         public string? AuthActivityId { get; set; }
     }
 

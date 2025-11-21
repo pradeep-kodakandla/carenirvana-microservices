@@ -510,7 +510,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     aa.duedate,
                     aa.statusid,
                     'Pending' as status,
-                    ad.authnumber
+                    ad.authnumber,
+                    aa.authactivityid as activityid
                 from authactivity aa
                 join authdetail ad on ad.authdetailid = aa.authdetailid
                 join memberdetails md on md.memberdetailsid = ad.memberdetailsid
@@ -544,7 +545,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     ma.duedate,
                     ma.statusid,
                     'Pending' AS status,
-                    NULL AS authnumber
+                    Null AS authnumber,
+                    ma.memberactivityid as activityid
                 FROM memberactivity ma
                 JOIN memberdetails md ON md.memberdetailsid = ma.memberdetailsid
                 JOIN securityuser su2 ON su2.userid = ma.referto
@@ -596,7 +598,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
                     StatusId = reader.IsDBNull(reader.GetOrdinal("statusid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("statusid")),
                     Status = reader.IsDBNull(reader.GetOrdinal("status")) ? null : reader.GetString(reader.GetOrdinal("status")),
-                    AuthNumber = reader.IsDBNull(reader.GetOrdinal("authnumber")) ? null : reader.GetString(reader.GetOrdinal("authnumber"))
+                    AuthNumber = reader.IsDBNull(reader.GetOrdinal("authnumber")) ? null : reader.GetString(reader.GetOrdinal("authnumber")),
+                    ActivityId = reader.IsDBNull(reader.GetOrdinal("activityid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("activityid"))
                 };
 
                 results.Add(item);

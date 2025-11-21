@@ -265,6 +265,16 @@ namespace CareNirvana.Service.Api.Controllers
 
             return Ok(items);
         }
-        
+        [HttpGet("{memberActivityId}")]
+        public async Task<IActionResult> GetMemberActivityDetailAsync( [FromRoute] int memberActivityId, CancellationToken cancellationToken)
+        {
+            var item = await _repository.GetMemberActivityDetailAsync(
+                memberActivityId,
+                cancellationToken);
+            if (item == null)
+                return NotFound(new { message = "Member activity not found." });
+            return Ok(item);
+
+        }
     }
 }
