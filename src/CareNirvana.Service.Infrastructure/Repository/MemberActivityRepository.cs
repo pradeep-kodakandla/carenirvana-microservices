@@ -33,69 +33,89 @@ namespace CareNirvana.Service.Infrastructure.Repository
         /// Returns the new MemberActivityId.
         /// </summary>
         public async Task<int> CreateMemberActivityAsync(
-            MemberActivity activity,
-            int? workGroupWorkBasketId,
-            int createdBy,
-            CancellationToken cancellationToken = default)
+    MemberActivity activity,
+    int? workGroupWorkBasketId,
+    int createdBy,
+    CancellationToken cancellationToken = default)
         {
             const string insertActivitySql = @"
-                INSERT INTO public.memberactivity
-                (
-                    activitytypeid,
-                    priorityid,
-                    memberdetailsid,
-                    followupdatetime,
-                    duedate,
-                    referto,
-                    isworkbasket,
-                    queueid,
-                    comment,
-                    statusid,
-                    performeddatetime,
-                    performedby,
-                    activeflag,
-                    createdon,
-                    createdby
-                )
-                VALUES
-                (
-                    @ActivityTypeId,
-                    @PriorityId,
-                    @MemberDetailsId,
-                    @FollowUpDateTime,
-                    @DueDate,
-                    @ReferTo,
-                    COALESCE(@IsWorkBasket, @IsWorkBasketDefault),
-                    @QueueId,
-                    @Comment,
-                    @StatusId,
-                    @PerformedDateTime,
-                    @PerformedBy,
-                    COALESCE(@ActiveFlag, true),
-                    CURRENT_TIMESTAMP,
-                    @CreatedBy
-                )
-                RETURNING memberactivityid;";
+        INSERT INTO public.memberactivity
+        (
+            activitytypeid,
+            priorityid,
+            memberdetailsid,
+            followupdatetime,
+            duedate,
+            referto,
+            isworkbasket,
+            queueid,
+            comment,
+            statusid,
+            performeddatetime,
+            performedby,
+            activeflag,
+            createdon,
+            createdby
+        )
+        VALUES
+        (
+            @ActivityTypeId,
+            @PriorityId,
+            @MemberDetailsId,
+            @FollowUpDateTime,
+            @DueDate,
+            @ReferTo,
+            COALESCE(@IsWorkBasket, @IsWorkBasketDefault),
+            @QueueId,
+            @Comment,
+            @StatusId,
+            @PerformedDateTime,
+            @PerformedBy,
+            COALESCE(@ActiveFlag, true),
+            CURRENT_TIMESTAMP,
+            @CreatedBy
+        )
+        RETURNING memberactivityid;";
 
             const string insertWorkGroupSql = @"
-                INSERT INTO public.memberactivityworkgroup
-                (
-                    memberactivityid,
-                    workgroupworkbasketid,
-                    groupstatusid,
-                    activeflag,
-                    createdon,
-                    createdby
-                )
-                VALUES
-                (
-                    @MemberActivityId,
-                    @WorkGroupWorkBasketId,
-                    @GroupStatusId,
-                    true,
-                    CURRENT_TIMESTAMP,
-                    @CreatedBy
-                );";
+        INSERT INTO public.memberactivityworkgroup
+        (
+            memberactivityid,
+            workgroupworkbasketid,
+            groupstatusid,
+            activeflag,
+            createdon,
+            createdby
+        )
+        VALUES
+        (
+            @MemberActivityId,
+            @WorkGroupWorkBasketId,
+            @GroupStatusId,
+            true,
+            CURRENT_TIMESTAMP,
+            @CreatedBy
+        );";
+
+            const string insertNoteSql = @"
+        INSERT INTO public.memberactivitynote
+        (
+            memberactivityid,
+            notetypeid,
+            notes,
+            activeflag,
+            createdon,
+            createdby
+        )
+        VALUES
+        (
+            @MemberActivityId,
+            NULL,
+            @Notes,
+            true,
+            CURRENT_TIMESTAMP,
+            @CreatedBy
+        );";
 
             await using var conn = GetConnection();
             await conn.OpenAsync(cancellationToken);
@@ -104,6 +124,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
             try
             {
+                // 1) Insert activity
                 var newId = await conn.ExecuteScalarAsync<int>(
                     new CommandDefinition(
                         insertActivitySql,
@@ -129,9 +150,9 @@ namespace CareNirvana.Service.Infrastructure.Repository
                         cancellationToken: cancellationToken
                     ));
 
+                // 2) Optional: workgroup link
                 if (workGroupWorkBasketId.HasValue)
                 {
-                    // Optionally set a default GroupStatusId (e.g. "Pending") from config if you want
                     await conn.ExecuteAsync(
                         new CommandDefinition(
                             insertWorkGroupSql,
@@ -140,6 +161,23 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                 MemberActivityId = newId,
                                 WorkGroupWorkBasketId = workGroupWorkBasketId.Value,
                                 GroupStatusId = (int?)null,
+                                CreatedBy = createdBy
+                            },
+                            tx,
+                            cancellationToken: cancellationToken
+                        ));
+                }
+
+                // 3) Note: save comment into memactivitynote (notetypeid = NULL)
+                if (!string.IsNullOrWhiteSpace(activity.Comment))
+                {
+                    await conn.ExecuteAsync(
+                        new CommandDefinition(
+                            insertNoteSql,
+                            new
+                            {
+                                MemberActivityId = newId,
+                                Notes = activity.Comment,
                                 CreatedBy = createdBy
                             },
                             tx,
@@ -157,6 +195,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
             }
         }
 
+
         #endregion
 
         #region Update Activity
@@ -166,31 +205,53 @@ namespace CareNirvana.Service.Infrastructure.Repository
         /// Does NOT change work group assignment or accept/reject info.
         /// </summary>
         public async Task<int> UpdateMemberActivityAsync(
-            MemberActivity activity,
-            int updatedBy,
-            CancellationToken cancellationToken = default)
+    MemberActivity activity,
+    int updatedBy,
+    CancellationToken cancellationToken = default)
         {
             const string updateSql = @"
-                UPDATE public.memberactivity
-                SET
-                    activitytypeid = @ActivityTypeId,
-                    priorityid = @PriorityId,
-                    memberdetailsid = @MemberDetailsId,
-                    followupdatetime = @FollowUpDateTime,
-                    duedate = @DueDate,
-                    queueid = @QueueId,
-                    comment = @Comment,
-                    statusid = @StatusId,
-                    performeddatetime = @PerformedDateTime,
-                    performedby = @PerformedBy,
-                    activeflag = COALESCE(@ActiveFlag, activeflag),
-                    updatedon = CURRENT_TIMESTAMP,
-                    updatedby = @UpdatedBy
-                WHERE memberactivityid = @MemberActivityId
-                  AND deletedon IS NULL;";
+        UPDATE public.memberactivity
+        SET
+            activitytypeid    = @ActivityTypeId,
+            priorityid        = @PriorityId,
+            memberdetailsid   = @MemberDetailsId,
+            followupdatetime  = @FollowUpDateTime,
+            duedate           = @DueDate,
+            queueid           = @QueueId,
+            comment           = @Comment,
+            statusid          = @StatusId,
+            performeddatetime = @PerformedDateTime,
+            performedby       = @PerformedBy,
+            activeflag        = COALESCE(@ActiveFlag, activeflag),
+            updatedon         = CURRENT_TIMESTAMP,
+            updatedby         = @UpdatedBy
+        WHERE memberactivityid = @MemberActivityId
+          AND deletedon IS NULL;";
+
+            const string insertNoteSql = @"
+        INSERT INTO public.memberactivitynote
+        (
+            memberactivityid,
+            notetypeid,
+            notes,
+            activeflag,
+            createdon,
+            createdby
+        )
+        VALUES
+        (
+            @MemberActivityId,
+            NULL,
+            @Notes,
+            true,
+            CURRENT_TIMESTAMP,
+            @CreatedBy
+        );";
 
             await using var conn = GetConnection();
-            return await conn.ExecuteAsync(
+
+            // 1) Update activity row
+            var affected = await conn.ExecuteAsync(
                 new CommandDefinition(
                     updateSql,
                     new
@@ -211,7 +272,26 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     },
                     cancellationToken: cancellationToken
                 ));
+
+            // 2) If comment provided, add a note with notetypeid = NULL
+            if (affected > 0 && !string.IsNullOrWhiteSpace(activity.Comment))
+            {
+                await conn.ExecuteAsync(
+                    new CommandDefinition(
+                        insertNoteSql,
+                        new
+                        {
+                            MemberActivityId = activity.MemberActivityId,
+                            Notes = activity.Comment,
+                            CreatedBy = updatedBy
+                        },
+                        cancellationToken: cancellationToken
+                    ));
+            }
+
+            return affected;
         }
+
 
         #endregion
 
@@ -222,56 +302,128 @@ namespace CareNirvana.Service.Infrastructure.Repository
         /// One row per user per work group activity, so we use upsert.
         /// </summary>
         public async Task<int> RejectWorkGroupActivityAsync(
-            int memberActivityWorkGroupId,
-            int userId,
-            string comment,
-            CancellationToken cancellationToken = default)
+     int memberActivityWorkGroupId,
+     int userId,
+     string comment,
+     CancellationToken cancellationToken = default)
         {
-            const string sql = @"
-                INSERT INTO public.memberactivityworkgroupaction
-                (
-                    memberactivityworkgroupid,
-                    userid,
-                    actiontype,
-                    actionon,
-                    comment,
-                    activeflag,
-                    createdon,
-                    createdby
-                )
-                VALUES
-                (
-                    @MemberActivityWorkGroupId,
-                    @UserId,
-                    'Rejected',
-                    CURRENT_TIMESTAMP,
-                    @Comment,
-                    true,
-                    CURRENT_TIMESTAMP,
-                    @UserId
-                )
-                ON CONFLICT (memberactivityworkgroupid, userid)
-                DO UPDATE SET
-                    actiontype = 'Rejected',
-                    actionon = CURRENT_TIMESTAMP,
-                    comment = @Comment,
-                    activeflag = true,
-                    updatedon = CURRENT_TIMESTAMP,
-                    updatedby = @UserId;";
+            const string insertActionSql = @"
+        INSERT INTO public.memberactivityworkgroupaction
+        (
+            memberactivityworkgroupid,
+            userid,
+            actiontype,
+            actionon,
+            comment,
+            activeflag,
+            createdon,
+            createdby
+        )
+        VALUES
+        (
+            @MemberActivityWorkGroupId,
+            @UserId,
+            'Rejected',
+            CURRENT_TIMESTAMP,
+            @Comment,
+            true,
+            CURRENT_TIMESTAMP,
+            @UserId
+        )
+        ON CONFLICT (memberactivityworkgroupid, userid)
+        DO UPDATE SET
+            actiontype = 'Rejected',
+            actionon   = CURRENT_TIMESTAMP,
+            comment    = @Comment,
+            activeflag = true,
+            updatedon  = CURRENT_TIMESTAMP,
+            updatedby  = @UserId;";
+
+            const string selectActivityIdSql = @"
+        SELECT memberactivityid
+        FROM public.memberactivityworkgroup
+        WHERE memberactivityworkgroupid = @MemberActivityWorkGroupId
+        LIMIT 1;";
+
+            const string insertNoteSql = @"
+        INSERT INTO public.memberactivitynote
+        (
+            memberactivityid,
+            notetypeid,
+            notes,
+            activeflag,
+            createdon,
+            createdby
+        )
+        VALUES
+        (
+            @MemberActivityId,
+            NULL,
+            @Notes,
+            true,
+            CURRENT_TIMESTAMP,
+            @CreatedBy
+        );";
 
             await using var conn = GetConnection();
-            return await conn.ExecuteAsync(
-                new CommandDefinition(
-                    sql,
-                    new
+            await conn.OpenAsync(cancellationToken);
+
+            await using var tx = await conn.BeginTransactionAsync(cancellationToken);
+
+            try
+            {
+                // 1) Upsert action row
+                var affected = await conn.ExecuteAsync(
+                    new CommandDefinition(
+                        insertActionSql,
+                        new
+                        {
+                            MemberActivityWorkGroupId = memberActivityWorkGroupId,
+                            UserId = userId,
+                            Comment = comment
+                        },
+                        tx,
+                        cancellationToken: cancellationToken
+                    ));
+
+                // 2) If there is a comment, add a note tied to the parent activity
+                if (!string.IsNullOrWhiteSpace(comment))
+                {
+                    var memberActivityId = await conn.QueryFirstOrDefaultAsync<int?>(
+                        new CommandDefinition(
+                            selectActivityIdSql,
+                            new { MemberActivityWorkGroupId = memberActivityWorkGroupId },
+                            tx,
+                            cancellationToken: cancellationToken
+                        ));
+
+                    if (memberActivityId.HasValue)
                     {
-                        MemberActivityWorkGroupId = memberActivityWorkGroupId,
-                        UserId = userId,
-                        Comment = comment
-                    },
-                    cancellationToken: cancellationToken
-                ));
+                        await conn.ExecuteAsync(
+                            new CommandDefinition(
+                                insertNoteSql,
+                                new
+                                {
+                                    MemberActivityId = memberActivityId.Value,
+                                    Notes = comment,
+                                    CreatedBy = userId
+                                },
+                                tx,
+                                cancellationToken: cancellationToken
+                            ));
+                    }
+                }
+
+                await tx.CommitAsync(cancellationToken);
+                return affected;
+            }
+            catch
+            {
+                await tx.RollbackAsync(cancellationToken);
+                throw;
+            }
         }
+
 
         /// <summary>
         /// Accepts (claims) a work group activity for a particular user.
@@ -282,67 +434,92 @@ namespace CareNirvana.Service.Infrastructure.Repository
         /// Returns affected rows of activity update (0 means someone else already claimed it).
         /// </summary>
         public async Task<int> AcceptWorkGroupActivityAsync(
-            int memberActivityWorkGroupId,
-            int userId,
-            string comment,
-            CancellationToken cancellationToken = default)
+    int memberActivityWorkGroupId,
+    int userId,
+    string comment,
+    CancellationToken cancellationToken = default)
         {
             const string insertActionSql = @"
-                INSERT INTO public.memberactivityworkgroupaction
-                (
-                    memberactivityworkgroupid,
-                    userid,
-                    actiontype,
-                    actionon,
-                    comment,
-                    activeflag,
-                    createdon,
-                    createdby
-                )
-                VALUES
-                (
-                    @MemberActivityWorkGroupId,
-                    @UserId,
-                    'Accepted',
-                    CURRENT_TIMESTAMP,
-                    @Comment,
-                    true,
-                    CURRENT_TIMESTAMP,
-                    @UserId
-                )
-                ON CONFLICT (memberactivityworkgroupid, userid)
-                DO UPDATE SET
-                    actiontype = 'Accepted',
-                    actionon = CURRENT_TIMESTAMP,
-                    comment = @Comment,
-                    activeflag = true,
-                    updatedon = CURRENT_TIMESTAMP,
-                    updatedby = @UserId;";
+        INSERT INTO public.memberactivityworkgroupaction
+        (
+            memberactivityworkgroupid,
+            userid,
+            actiontype,
+            actionon,
+            comment,
+            activeflag,
+            createdon,
+            createdby
+        )
+        VALUES
+        (
+            @MemberActivityWorkGroupId,
+            @UserId,
+            'Accepted',
+            CURRENT_TIMESTAMP,
+            @Comment,
+            true,
+            CURRENT_TIMESTAMP,
+            @UserId
+        )
+        ON CONFLICT (memberactivityworkgroupid, userid)
+        DO UPDATE SET
+            actiontype = 'Accepted',
+            actionon   = CURRENT_TIMESTAMP,
+            comment    = @Comment,
+            activeflag = true,
+            updatedon  = CURRENT_TIMESTAMP,
+            updatedby  = @UserId;";
 
-            // Only allow the first accept to set referto
             const string updateActivitySql = @"
-                UPDATE public.memberactivity
-                SET
-                    referto = @UserId,
-                    isworkbasket = false,
-                    updatedon = CURRENT_TIMESTAMP,
-                    updatedby = @UserId
-                WHERE memberactivityid = (
-                    SELECT memberactivityid
-                    FROM public.memberactivityworkgroup
-                    WHERE memberactivityworkgroupid = @MemberActivityWorkGroupId
-                )
-                AND referto IS NULL
-                AND deletedon IS NULL;";
+        UPDATE public.memberactivity a
+        SET
+            referto      = @UserId,
+            isworkbasket = false,
+            updatedon    = CURRENT_TIMESTAMP,
+            updatedby    = @UserId
+        WHERE a.memberactivityid IN
+        (
+            SELECT maw.memberactivityid
+            FROM public.memberactivityworkgroup maw
+            WHERE maw.memberactivityworkgroupid = @MemberActivityWorkGroupId
+        )
+        AND referto IS NULL
+        AND deletedon IS NULL;";
 
-            // Optional: close the work group pool entry
             const string updateWorkGroupSql = @"
-                UPDATE public.memberactivityworkgroup
-                SET
-                    activeflag = false,
-                    updatedon = CURRENT_TIMESTAMP,
-                    updatedby = @UserId
-                WHERE memberactivityworkgroupid = @MemberActivityWorkGroupId;";
+        UPDATE public.memberactivityworkgroup
+        SET
+            activeflag = false,
+            updatedon  = CURRENT_TIMESTAMP,
+            updatedby  = @UserId
+        WHERE memberactivityworkgroupid = @MemberActivityWorkGroupId;";
+
+            const string selectActivityIdSql = @"
+        SELECT memberactivityid
+        FROM public.memberactivityworkgroup
+        WHERE memberactivityworkgroupid = @MemberActivityWorkGroupId
+        LIMIT 1;";
+
+            const string insertNoteSql = @"
+        INSERT INTO public.memberactivitynote
+        (
+            memberactivityid,
+            notetypeid,
+            notes,
+            activeflag,
+            createdon,
+            createdby
+        )
+        VALUES
+        (
+            @MemberActivityId,
+            NULL,
+            @Notes,
+            true,
+            CURRENT_TIMESTAMP,
+            @CreatedBy
+        );";
 
             await using var conn = GetConnection();
             await conn.OpenAsync(cancellationToken);
@@ -351,7 +528,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
             try
             {
-                // 1) record action
+                // 1) Record accept action
                 await conn.ExecuteAsync(
                     new CommandDefinition(
                         insertActionSql,
@@ -365,7 +542,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                         cancellationToken: cancellationToken
                     ));
 
-                // 2) claim activity (only first wins)
+                // 2) Claim activity (only first wins)
                 var affectedActivity = await conn.ExecuteAsync(
                     new CommandDefinition(
                         updateActivitySql,
@@ -385,7 +562,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     return 0;
                 }
 
-                // 3) close pool row
+                // 3) Optional: close the work group pool entry
                 await conn.ExecuteAsync(
                     new CommandDefinition(
                         updateWorkGroupSql,
@@ -398,6 +575,34 @@ namespace CareNirvana.Service.Infrastructure.Repository
                         cancellationToken: cancellationToken
                     ));
 
+                // 4) Save comment as note if provided
+                if (!string.IsNullOrWhiteSpace(comment))
+                {
+                    var memberActivityId = await conn.QueryFirstOrDefaultAsync<int?>(
+                        new CommandDefinition(
+                            selectActivityIdSql,
+                            new { MemberActivityWorkGroupId = memberActivityWorkGroupId },
+                            tx,
+                            cancellationToken: cancellationToken
+                        ));
+
+                    if (memberActivityId.HasValue)
+                    {
+                        await conn.ExecuteAsync(
+                            new CommandDefinition(
+                                insertNoteSql,
+                                new
+                                {
+                                    MemberActivityId = memberActivityId.Value,
+                                    Notes = comment,
+                                    CreatedBy = userId
+                                },
+                                tx,
+                                cancellationToken: cancellationToken
+                            ));
+                    }
+                }
+
                 await tx.CommitAsync(cancellationToken);
                 return affectedActivity;
             }
@@ -407,6 +612,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 throw;
             }
         }
+
 
         /// <summary>
         /// Optional: update group status id (e.g. Pending / Claimed / Closed) if you use it.
@@ -446,29 +652,60 @@ namespace CareNirvana.Service.Infrastructure.Repository
         /// <summary>
         /// Soft deletes an activity and deactivates its work group records.
         /// </summary>
+        /// <summary>
+        /// Soft deletes an activity and deactivates its work group records.
+        /// Also writes the current activity.comment to memactivitynote (notetypeid = NULL) if present.
+        /// </summary>
         public async Task<int> DeleteMemberActivityAsync(
             int memberActivityId,
             int deletedBy,
             CancellationToken cancellationToken = default)
         {
+            const string selectCommentSql = @"
+        SELECT comment
+        FROM public.memberactivity
+        WHERE memberactivityid = @MemberActivityId
+          AND deletedon IS NULL
+        LIMIT 1;";
+
+            const string insertNoteSql = @"
+        INSERT INTO public.memberactivitynote
+        (
+            memberactivityid,
+            notetypeid,
+            notes,
+            activeflag,
+            createdon,
+            createdby
+        )
+        VALUES
+        (
+            @MemberActivityId,
+            NULL,
+            @Notes,
+            true,
+            CURRENT_TIMESTAMP,
+            @CreatedBy
+        );";
+
             const string deleteActivitySql = @"
-                UPDATE public.memberactivity
-                SET
-                    activeflag = false,
-                    deletedon = CURRENT_TIMESTAMP,
-                    deletedby = @DeletedBy,
-                    updatedon = CURRENT_TIMESTAMP,
-                    updatedby = @DeletedBy
-                WHERE memberactivityid = @MemberActivityId
-                  AND deletedon IS NULL;";
+        UPDATE public.memberactivity
+        SET
+            activeflag = false,
+            deletedon  = CURRENT_TIMESTAMP,
+            deletedby  = @DeletedBy,
+            updatedon  = CURRENT_TIMESTAMP,
+            updatedby  = @DeletedBy
+        WHERE memberactivityid = @MemberActivityId
+          AND deletedon IS NULL;";
 
             const string deactivateWorkGroupSql = @"
-                UPDATE public.memberactivityworkgroup
-                SET
-                    activeflag = false,
-                    updatedon = CURRENT_TIMESTAMP,
-                    updatedby = @DeletedBy
-                WHERE memberactivityid = @MemberActivityId;";
+        UPDATE public.memberactivityworkgroup
+        SET
+            activeflag = false,
+            updatedon  = CURRENT_TIMESTAMP,
+            updatedby  = @DeletedBy
+        WHERE memberactivityid = @MemberActivityId;";
 
             await using var conn = GetConnection();
             await conn.OpenAsync(cancellationToken);
@@ -477,6 +714,33 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
             try
             {
+                // 0) Read existing comment (if any)
+                var existingComment = await conn.QueryFirstOrDefaultAsync<string>(
+                    new CommandDefinition(
+                        selectCommentSql,
+                        new { MemberActivityId = memberActivityId },
+                        tx,
+                        cancellationToken: cancellationToken
+                    ));
+
+                if (!string.IsNullOrWhiteSpace(existingComment))
+                {
+                    // Save it as a note with notetypeid = NULL
+                    await conn.ExecuteAsync(
+                        new CommandDefinition(
+                            insertNoteSql,
+                            new
+                            {
+                                MemberActivityId = memberActivityId,
+                                Notes = existingComment,
+                                CreatedBy = deletedBy
+                            },
+                            tx,
+                            cancellationToken: cancellationToken
+                        ));
+                }
+
+                // 1) Soft delete activity
                 var affectedActivity = await conn.ExecuteAsync(
                     new CommandDefinition(
                         deleteActivitySql,
@@ -489,6 +753,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                         cancellationToken: cancellationToken
                     ));
 
+                // 2) Deactivate related workgroup rows
                 await conn.ExecuteAsync(
                     new CommandDefinition(
                         deactivateWorkGroupSql,
@@ -510,6 +775,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 throw;
             }
         }
+
 
         public async Task<IEnumerable<MemberActivityRequestItem>> GetRequestActivitiesAsync(
     IEnumerable<int> workGroupWorkBasketIds,
