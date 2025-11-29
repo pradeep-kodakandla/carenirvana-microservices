@@ -119,7 +119,7 @@ namespace CareNirvana.Service.Domain.Model
         public string WorkBasketName { get; set; }
 
         public bool ActiveFlag { get; set; }
-
+        public bool IsFax { get; set; }
         public int[] AssignedUserIds { get; set; } = Array.Empty<int>();
         public string[] AssignedUserNames { get; set; } = Array.Empty<string>();
     }
@@ -185,6 +185,11 @@ namespace CareNirvana.Service.Domain.Model
         public DateTime CreatedOn { get; set; }
         public DateTime? UpdatedOn { get; set; }
         public int? UpdatedBy { get; set; }
+
+        public int? ParentFaxId { get; set; } 
+
+        public DateTime? DeletedOn { get; set; }
+        public int? DeletedBy { get; set; }
     }
 
 }

@@ -737,7 +737,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 wb.workbasketname,
                 COALESCE(cug0.activeflag, TRUE) AS activeflag,
                 COALESCE(agg.assigneduserids, ARRAY[]::integer[])   AS assigneduserids,
-                COALESCE(agg.assignedusernames, ARRAY[]::text[])    AS assignedusernames
+                COALESCE(agg.assignedusernames, ARRAY[]::text[])    AS assignedusernames,
+                wg.isfax
                     FROM cfguserworkgroup cug0
                     JOIN securityuser su0
                       ON su0.userid = cug0.userid
@@ -790,7 +791,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     WorkBasketName = reader.IsDBNull(reader.GetOrdinal("workbasketname")) ? null : reader.GetString(reader.GetOrdinal("workbasketname")),
                     ActiveFlag = !reader.IsDBNull(reader.GetOrdinal("activeflag")) && reader.GetBoolean(reader.GetOrdinal("activeflag")),
                     AssignedUserIds = !reader.IsDBNull(reader.GetOrdinal("assigneduserids")) ? reader.GetFieldValue<int[]>(reader.GetOrdinal("assigneduserids")) : Array.Empty<int>(),
-                    AssignedUserNames = !reader.IsDBNull(reader.GetOrdinal("assignedusernames")) ? reader.GetFieldValue<string[]>(reader.GetOrdinal("assignedusernames")) : Array.Empty<string>()
+                    AssignedUserNames = !reader.IsDBNull(reader.GetOrdinal("assignedusernames")) ? reader.GetFieldValue<string[]>(reader.GetOrdinal("assignedusernames")) : Array.Empty<string>(),
+                    IsFax = !reader.IsDBNull(reader.GetOrdinal("isfax")) && reader.GetBoolean(reader.GetOrdinal("isfax"))
                 };
 
                 results.Add(item);
@@ -1033,7 +1035,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     receivedat, uploadedby, uploadedat,
                     pagecount, memberid, workbasket, priority, status, processstatus,
                     meta, ocrtext, ocrjsonpath, filebytes,
-                    createdon, createdby, updatedon, updatedby
+                    createdon, createdby, updatedon, updatedby, parentfaxid
                 )
                 VALUES
                 (
@@ -1041,7 +1043,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     @receivedat, @uploadedby, @uploadedat,
                     @pagecount, @memberid, @workbasket, @priority, @status, @processstatus,
                     @meta, @ocrtext, @ocrjsonpath, @filebytes,
-                    @createdon, @createdby, @updatedon, @updatedby
+                    @createdon, @createdby, @updatedon, @updatedby, @parentfaxid
                 )
                 RETURNING faxid;";
 
@@ -1065,6 +1067,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
             cmd.Parameters.AddWithValue("@priority", fax.Priority);
             cmd.Parameters.AddWithValue("@status", fax.Status ?? "New");
             cmd.Parameters.AddWithValue("@processstatus", fax.ProcessStatus ?? "Pending");
+            cmd.Parameters.AddWithValue("@parentfaxid", fax.ParentFaxId);
 
             // meta jsonb
             if (string.IsNullOrWhiteSpace(fax.MetaJson))
@@ -1094,56 +1097,30 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 UPDATE faxfiles
                 SET
                     filename      = @filename,
-                    storedpath    = @storedpath,
-                    originalname  = @originalname,
-                    contenttype   = @contenttype,
-                    sizebytes     = @sizebytes,
-                    sha256hex     = @sha256hex,
-                    receivedat    = @receivedat,
-                    uploadedby    = @uploadedby,
-                    uploadedat    = @uploadedat,
-                    pagecount     = @pagecount,
                     memberid      = @memberid,
                     workbasket    = @workbasket,
                     priority      = @priority,
                     status        = @status,
                     processstatus = @processstatus,
-                    meta          = @meta,
-                    ocrtext       = @ocrtext,
-                    ocrjsonpath   = @ocrjsonpath,
                     updatedon     = @updatedon,
-                    updatedby     = @updatedby
+                    updatedby     = @updatedby,
+                    deletedon     = @deletedon,
+                    deletedby     = @deletedby
                 WHERE faxid = @faxid;";
 
             using var cmd = new NpgsqlCommand(sql, conn);
 
             cmd.Parameters.AddWithValue("@faxid", fax.FaxId);
             cmd.Parameters.AddWithValue("@filename", fax.FileName ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@storedpath", fax.Url ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@originalname", (object?)fax.OriginalName ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@contenttype", (object?)fax.ContentType ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@sizebytes", (object?)fax.SizeBytes ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@sha256hex", (object?)fax.Sha256Hex ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@receivedat", fax.ReceivedAt);
-            cmd.Parameters.AddWithValue("@uploadedby", (object?)fax.UploadedBy ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@uploadedat", (object?)fax.UploadedAt ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@pagecount", fax.PageCount);
             cmd.Parameters.AddWithValue("@memberid", (object?)fax.MemberId ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@workbasket", (object?)fax.WorkBasket ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@priority", fax.Priority);
             cmd.Parameters.AddWithValue("@status", fax.Status ?? "New");
             cmd.Parameters.AddWithValue("@processstatus", fax.ProcessStatus ?? "Pending");
-
-            if (string.IsNullOrWhiteSpace(fax.MetaJson))
-                cmd.Parameters.AddWithValue("@meta", NpgsqlDbType.Jsonb, DBNull.Value);
-            else
-                cmd.Parameters.AddWithValue("@meta", NpgsqlDbType.Jsonb, fax.MetaJson);
-
-            cmd.Parameters.AddWithValue("@ocrtext", (object?)fax.OcrText ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@ocrjsonpath", (object?)fax.OcrJsonPath ?? DBNull.Value);
-
             cmd.Parameters.AddWithValue("@updatedon", fax.UpdatedOn ?? DateTime.UtcNow);
             cmd.Parameters.AddWithValue("@updatedby", (object?)fax.UpdatedBy ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@deletedon", fax.DeletedOn ?? DateTime.UtcNow);
+            cmd.Parameters.AddWithValue("@deletedby", (object?)fax.DeletedBy ?? DBNull.Value);
 
             return await cmd.ExecuteNonQueryAsync();
         }
@@ -1160,33 +1137,36 @@ namespace CareNirvana.Service.Infrastructure.Repository
             var total = 0;
 
             const string sql = @"
-                SELECT
-                    f.faxid,
-                    f.filename,
-                    f.storedpath,
-                    f.originalname,
-                    f.contenttype,
-                    f.sizebytes,
-                    f.sha256hex,
-                    f.receivedat,
-                    f.uploadedby,
-                    f.uploadedat,
-                    f.pagecount,
-                    f.memberid,
-                    f.workbasket,
-                    f.priority,
-                    f.status,
-                    f.processstatus,
-                    f.meta,
-                    f.ocrtext,
-                    f.ocrjsonpath,
-                    f.createdon,
-                    f.createdby,
-                    f.updatedon,
-                    f.updatedby,
-                    COUNT(*) OVER() AS total_count
-                FROM faxfiles f
-                ORDER BY f.receivedat DESC;";
+              SELECT
+                  f.faxid,
+                  f.filename,
+                  f.storedpath,
+                  f.originalname,
+                  f.contenttype,
+                  f.sizebytes,
+                  f.sha256hex,
+                  f.receivedat,
+                  f.uploadedby,
+                  f.uploadedat,
+                  f.pagecount,
+                  f.memberid,
+                  wb.workbasketname as workbasket,
+                  f.priority,
+                  f.status,
+                  f.processstatus,
+                  f.meta,
+                  f.ocrtext,
+                  f.ocrjsonpath,
+                  f.createdon,
+                  f.createdby,
+                  f.updatedon,
+                  f.updatedby,
+                  f.parentfaxid,
+                  COUNT(*) OVER() AS total_count
+              FROM faxfiles f
+			  LEFT JOIN cfgworkbasket wb on f.workbasket::integer = wb.workbasketid
+              where f.deletedby is null
+              ORDER BY f.receivedat DESC;";
 
             using var conn = new NpgsqlConnection(_connectionString);
             await conn.OpenAsync();
@@ -1221,7 +1201,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     CreatedOn = reader.GetDateTime(reader.GetOrdinal("createdon")),
                     CreatedBy = reader.IsDBNull(reader.GetOrdinal("createdby")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("createdby")),
                     UpdatedOn = reader.IsDBNull(reader.GetOrdinal("updatedon")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("updatedon")),
-                    UpdatedBy = reader.IsDBNull(reader.GetOrdinal("updatedby")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("updatedby"))
+                    UpdatedBy = reader.IsDBNull(reader.GetOrdinal("updatedby")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("updatedby")),
+                    ParentFaxId = reader.IsDBNull(reader.GetOrdinal("parentfaxid")) ? (int?)0 : reader.GetInt32(reader.GetOrdinal("parentfaxid"))
                 };
 
                 results.Add(f);
@@ -1237,7 +1218,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     faxid, filename, storedpath, originalname, contenttype, sizebytes, sha256hex,
                     receivedat, uploadedby, uploadedat, pagecount, memberid, workbasket,
                     priority, status, processstatus, meta, ocrtext, ocrjsonpath, filebytes,
-                    createdon, createdby, updatedon, updatedby
+                    createdon, createdby, updatedon, updatedby, parentfaxid
                 FROM faxfiles
                 WHERE faxid = @faxid;";
 
@@ -1265,7 +1246,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     CreatedOn = reader.GetDateTime(reader.GetOrdinal("createdon")),
                     CreatedBy = reader.IsDBNull(reader.GetOrdinal("createdby")) ? 0 : reader.GetInt32(reader.GetOrdinal("createdby")),
                     UpdatedOn = reader.IsDBNull(reader.GetOrdinal("updatedon")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("updatedon")),
-                    UpdatedBy = reader.IsDBNull(reader.GetOrdinal("updatedby")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("updatedby"))
+                    UpdatedBy = reader.IsDBNull(reader.GetOrdinal("updatedby")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("updatedby")),
+                    ParentFaxId = reader.IsDBNull(reader.GetOrdinal("parentfaxid")) ? (int?)0 : reader.GetInt32(reader.GetOrdinal("parentfaxid"))
                 };
             }
 
