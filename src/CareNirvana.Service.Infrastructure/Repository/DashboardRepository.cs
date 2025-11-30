@@ -1295,6 +1295,215 @@ namespace CareNirvana.Service.Infrastructure.Repository
         }
 
 
+        public async Task<IEnumerable<MemberSearchResultDto>> SearchMembersAsync(MemberSearchCriteriaDto criteria)
+        {
+            var sql = @"
+                           SELECT
+                        md.memberdetailsid       AS MemberDetailsId,
+                        md.memberid              AS MemberId,
+                        md.memberid::text        AS MedicaidId,
+                        md.firstname             AS FirstName,
+                        md.lastname              AS LastName,
+                        md.birthdate             AS Dob,
+                        NULL                     AS Gender,
+                        md.activeflag::bool      AS Status,
+                        ph.phone_number          AS PhoneNumber,
+                        em.email_address         AS EmailAddress,
+                        ad.addressline1          AS AddressLine1,
+                        ad.city                  AS City,
+                        NULL                     AS State,
+                        ad.zipcode               AS ZipCode
+                    FROM public.memberdetails md
+
+                    -- pick ONE phone for display
+                    LEFT JOIN LATERAL (
+                        SELECT p.phonenumber AS phone_number
+                        FROM public.memberphonenumber p
+                        WHERE p.memberdetailsid = md.memberdetailsid
+                        ORDER BY COALESCE(p.isprimary, false) DESC,
+                                 COALESCE(p.createdon, now()) DESC
+                        LIMIT 1
+                    ) ph ON TRUE
+
+                    -- pick ONE email for display
+                    LEFT JOIN LATERAL (
+                        SELECT NULL AS email_address
+                        FROM public.memberemail e
+                        WHERE e.memberdetailsid = md.memberdetailsid
+                        ORDER BY COALESCE(e.isprimary, false) DESC,
+                                 COALESCE(e.createdon, now()) DESC
+                        LIMIT 1
+                    ) em ON TRUE
+
+                    -- pick ONE address for display
+                    LEFT JOIN LATERAL (
+                        SELECT
+                            a.addressline1 AS addressline1,
+                            a.city,
+                            a.zipcode
+                        FROM public.memberaddress a
+                        WHERE a.memberdetailsid = md.memberdetailsid
+                        ORDER BY COALESCE(a.isprimary, false) DESC,
+                                 COALESCE(a.createdon, now()) DESC
+                        LIMIT 1
+                    ) ad ON TRUE
+
+                    WHERE
+                        (
+                            @p_quicktext IS NULL
+                            OR @p_quicktext = ''
+
+                            OR md.memberid::text = @p_quicktext
+                            OR (md.firstname || ' ' || md.lastname) ILIKE '%' || @p_quicktext || '%'
+                            OR md.firstname ILIKE '%' || @p_quicktext || '%'
+                            OR md.lastname  ILIKE '%' || @p_quicktext || '%'
+
+                            -- any phone (only if quickText has digits)
+                            OR (
+                                @p_quicktext ~ '\d'
+                                AND EXISTS (
+                                    SELECT 1
+                                    FROM public.memberphonenumber p
+                                    WHERE p.memberdetailsid = md.memberdetailsid
+                                      AND regexp_replace(COALESCE(p.phonenumber, ''), '\D', '', 'g')
+                                          LIKE  regexp_replace(@p_quicktext, '\D', '', 'g') || '%'
+                                )
+                            )
+
+                            -- any email
+                            OR EXISTS (
+                                SELECT 1
+                                FROM public.memberemail e
+                                WHERE e.memberdetailsid = md.memberdetailsid
+                                  AND e.emailaddress ILIKE '%' || @p_quicktext || '%'
+                            )
+
+                            -- any address (addressline1 + city + zip)
+                            OR EXISTS (
+                                SELECT 1
+                                FROM public.memberaddress a
+                                WHERE a.memberdetailsid = md.memberdetailsid
+                                  AND (
+                                      (COALESCE(a.addressline1, '') || ' ' ||
+                                       COALESCE(a.city, '')        || ' ' ||
+                                       COALESCE(a.zipcode, '')
+                                      ) ILIKE '%' || @p_quicktext || '%'
+                                  )
+                            )
+                        )
+
+                        -- ADVANCED FILTERS
+                        AND (@p_firstname IS NULL OR md.firstname ILIKE @p_firstname || '%')
+                        AND (@p_lastname  IS NULL OR md.lastname  ILIKE @p_lastname  || '%')
+
+                        AND (@p_memberid   IS NULL OR md.memberid::text = @p_memberid)
+                        AND (@p_medicaidid IS NULL OR md.memberid::text = @p_medicaidid)
+
+                       -- AND (@p_dob_from IS NULL OR md.birthdate >= @p_dob_from::date)
+                        --AND (@p_dob_to   IS NULL OR md.birthdate <= @p_dob_to::date)
+
+                        -- phone filter (any phone)
+                        AND (
+                            @p_phone IS NULL
+                            OR EXISTS (
+                                SELECT 1
+                                FROM public.memberphonenumber p2
+                                WHERE p2.memberdetailsid = md.memberdetailsid
+                                  AND regexp_replace(COALESCE(p2.phonenumber, ''), '\D', '', 'g')
+                                      LIKE '%' || regexp_replace(@p_phone, '\D', '', 'g') || '%'
+                            )
+                        )
+
+                        -- email filter (any email)
+                        AND (
+                            @p_email IS NULL
+                            OR EXISTS (
+                                SELECT 1
+                                FROM public.memberemail e2
+                                WHERE e2.memberdetailsid = md.memberdetailsid
+                                  AND e2.emailaddress ILIKE '%' || @p_email || '%'
+                            )
+                        )
+
+                        -- city filter
+                        AND (
+                            @p_city IS NULL
+                            OR EXISTS (
+                                SELECT 1
+                                FROM public.memberaddress a2
+                                WHERE a2.memberdetailsid = md.memberdetailsid
+                                  AND a2.city ILIKE @p_city || '%'
+                            )
+                        )
+
+                        -- zip filter
+                        AND (
+                            @p_zip IS NULL
+                            OR EXISTS (
+                                SELECT 1
+                                FROM public.memberaddress a4
+                                WHERE a4.memberdetailsid = md.memberdetailsid
+                                  AND a4.zipcode LIKE @p_zip || '%'
+                            )
+                        )
+
+                    ORDER BY md.lastname, md.firstname, md.memberid
+                    LIMIT @Limit OFFSET @Offset; ";
+
+
+            var offset = (criteria.PageNumber <= 1 ? 0 : (criteria.PageNumber - 1) * criteria.PageSize);
+
+            await using var conn = new NpgsqlConnection(_connectionString);
+
+            //Console.WriteLine("========= MEMBER SEARCH SQL =========");
+            //Console.WriteLine(sql);
+            //Console.WriteLine("=====================================");
+            //Console.WriteLine("========= MEMBER SEARCH PARAMS =========");
+            //Console.WriteLine($"QuickText   = {criteria.QuickText}");
+            //Console.WriteLine($"FirstName   = {criteria.FirstName}");
+            //Console.WriteLine($"LastName    = {criteria.LastName}");
+            //Console.WriteLine($"MemberId    = {criteria.MemberId}");
+            //Console.WriteLine($"MedicaidId  = {criteria.MedicaidId}");
+            //Console.WriteLine($"DobFrom     = {criteria.DobFrom}");
+            //Console.WriteLine($"DobTo       = {criteria.DobTo}");
+            //Console.WriteLine($"Phone       = {criteria.Phone}");
+            //Console.WriteLine($"Email       = {criteria.Email}");
+            //Console.WriteLine($"City        = {criteria.City}");
+            //Console.WriteLine($"State       = {criteria.State}");
+            //Console.WriteLine($"Zip         = {criteria.Zip}");
+            //Console.WriteLine($"Limit       = {criteria.PageSize}");
+            //Console.WriteLine($"Offset      = {offset}");
+            //Console.WriteLine("========================================");
+
+            var results = await conn.QueryAsync<MemberSearchResultDto>(sql, new
+            {
+                p_quicktext = EmptyToNull(criteria.QuickText),
+
+                p_firstname = EmptyToNull(criteria.FirstName),
+                p_lastname = EmptyToNull(criteria.LastName),
+                p_memberid = EmptyToNull(criteria.MemberId),
+                p_medicaidid = EmptyToNull(criteria.MedicaidId),
+
+                p_dob_from = criteria.DobFrom,
+                p_dob_to = criteria.DobTo,
+
+               // p_gender = EmptyToNull(criteria.Gender),
+                p_phone = EmptyToNull(criteria.Phone),
+                p_email = EmptyToNull(criteria.Email),
+
+                p_city = EmptyToNull(criteria.City),
+                //p_state = EmptyToNull(criteria.State),
+                p_zip = EmptyToNull(criteria.Zip),
+
+                Limit = criteria.PageSize,
+                Offset = offset
+            });
+
+            return results;
+        }
+
+        private static string? EmptyToNull(string? value)
+            => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
 

@@ -28,6 +28,8 @@ namespace CareNirvana.Service.Application.Services
             _repo.EndMemberCareStaffAsync(memberDetailsId, endDate, careStaffId, updatedBy, ct);
         public Task<List<UserWorkGroupWorkBasketItem>> GetUserWorkGroupWorkBasketsAsync(int userId) => _repo.GetUserWorkGroupWorkBasketsAsync(userId);
         public Task<List<ActivityRequestItem>> GetRequestActivitiesAsync(int? userId = null) => _repo.GetRequestActivitiesAsync(userId);
+
+        public Task<IEnumerable<MemberSearchResultDto>> SearchMembersAsync(MemberSearchCriteriaDto criteria) => _repo.SearchMembersAsync(criteria);
     }
 
 }

@@ -177,4 +177,12 @@ public class DashBoardController : ControllerBase
             return NotFound(new { message = "No request activities found." });
         return Ok(result);
     }
+
+    [HttpPost("search")]
+    public async Task<ActionResult<IEnumerable<MemberSearchResultDto>>> SearchMembers(
+    [FromBody] MemberSearchCriteriaDto criteria)
+    {
+        var results = await _dashBoardService.SearchMembersAsync(criteria);
+        return Ok(results);
+    }
 }

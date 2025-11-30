@@ -186,10 +186,60 @@ namespace CareNirvana.Service.Domain.Model
         public DateTime? UpdatedOn { get; set; }
         public int? UpdatedBy { get; set; }
 
-        public int? ParentFaxId { get; set; } 
+        public int? ParentFaxId { get; set; }
 
         public DateTime? DeletedOn { get; set; }
         public int? DeletedBy { get; set; }
+    }
+
+
+    // Models/MemberSearchCriteriaDto.cs
+    public class MemberSearchCriteriaDto
+    {
+        public string? QuickText { get; set; }
+
+        public string? FirstName { get; set; }
+        public string? LastName { get; set; }
+        public string? MemberId { get; set; }
+        public string? MedicaidId { get; set; }
+
+        public DateTime? DobFrom { get; set; }
+        public DateTime? DobTo { get; set; }
+
+        public string? Gender { get; set; }
+        public string? Phone { get; set; }
+        public string? Email { get; set; }
+
+        public string? City { get; set; }
+        public string? State { get; set; }
+        public string? Zip { get; set; }
+
+        // simple paging
+        public int PageNumber { get; set; } = 1;
+        public int PageSize { get; set; } = 25;
+    }
+
+    // Models/MemberSearchResultDto.cs
+    public class MemberSearchResultDto
+    {
+        public int MemberDetailsId { get; set; }
+        public string MemberId { get; set; } = string.Empty;
+        public string? MedicaidId { get; set; }
+
+        public string FirstName { get; set; } = string.Empty;
+        public string LastName { get; set; } = string.Empty;
+        public DateTime? Dob { get; set; }
+
+        public string? Gender { get; set; }
+        public string? Status { get; set; }
+
+        public string? PhoneNumber { get; set; }
+        public string? EmailAddress { get; set; }
+
+        public string? AddressLine1 { get; set; }
+        public string? City { get; set; }
+        public string? State { get; set; }
+        public string? ZipCode { get; set; }
     }
 
 }

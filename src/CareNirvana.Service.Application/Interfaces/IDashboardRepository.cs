@@ -25,5 +25,7 @@ namespace CareNirvana.Service.Application.Interfaces
         Task<int> EndMemberCareStaffAsync(int memberDetailsId, DateTime endDate, int? careStaffId = null, int? updatedBy = null, CancellationToken ct = default);
         Task<List<UserWorkGroupWorkBasketItem>> GetUserWorkGroupWorkBasketsAsync(int userId);
         Task<List<ActivityRequestItem>> GetRequestActivitiesAsync(int? userId = null);
+
+        Task<IEnumerable<MemberSearchResultDto>> SearchMembersAsync(MemberSearchCriteriaDto criteria);
     }
 }
