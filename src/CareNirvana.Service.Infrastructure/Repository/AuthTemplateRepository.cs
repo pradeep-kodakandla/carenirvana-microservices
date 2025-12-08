@@ -132,7 +132,10 @@ namespace CareNirvana.Service.Infrastructure.Repository
                             command.Parameters.AddWithValue("@updatedby", authTemplate.CreatedBy);
                             command.Parameters.AddWithValue("@updatedon", authTemplate.CreatedOn);
                             command.Parameters.AddWithValue("@templateName", authTemplate.TemplateName);
-                            command.Parameters.AddWithValue("@id", authTemplate.Id);
+                            //command.Parameters.AddWithValue("@id", authTemplate.Id);
+
+                            command.Parameters.Add("@id", NpgsqlTypes.NpgsqlDbType.Integer).Value = authTemplate.Id!.Value;
+
 
                             // Explicitly set the parameter type for JSONB
                             command.Parameters["@JsonContent"].NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Jsonb;
