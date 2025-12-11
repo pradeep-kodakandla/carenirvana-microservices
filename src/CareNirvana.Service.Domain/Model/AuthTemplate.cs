@@ -13,6 +13,10 @@ namespace CareNirvana.Service.Domain.Model
         public string JsonContent { get; set; }
         public DateTime CreatedOn { get; set; }
         public int CreatedBy { get; set; }
+        public string? CreatedByUser { get; set; }
         public int? authclassid { get; set; }
+
+        public string? module { get; set; }
+        public int? EnrollmentHierarchyId { get; set; }
     }
 }

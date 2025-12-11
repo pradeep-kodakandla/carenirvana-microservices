@@ -18,17 +18,17 @@ namespace CareNirvana.Service.API.Controllers
             _saveAuthDetailCommand = saveAuthDetailCommand;
         }
 
-        [HttpGet("fetch/{authclassId}")]
-        public async Task<ActionResult<List<AuthTemplate>>> GetAuthTemplates(int authclassId)
+        [HttpGet("fetch/{module}/{authclassId}")]
+        public async Task<ActionResult<List<AuthTemplate>>> GetAuthTemplates(string module, int authclassId)
         {
-            var result = await _getAuthTemplatesQuery.ExecuteAsync(authclassId);
+            var result = await _getAuthTemplatesQuery.ExecuteAsync(authclassId, module);
             return Ok(result);
         }
 
-        [HttpGet("template/{id}")]
-        public async Task<ActionResult<List<AuthTemplate>>> GetAuthTemplate(int id)
+        [HttpGet("template/{module}/{id}")]
+        public async Task<ActionResult<List<AuthTemplate>>> GetAuthTemplate(string module, int id)
         {
-            var result = await _getAuthTemplatesQuery.GetTemplate(id);
+            var result = await _getAuthTemplatesQuery.GetTemplate(id, module);
             return Ok(result);
         }
 
@@ -66,12 +66,23 @@ namespace CareNirvana.Service.API.Controllers
         {
             try
             {
+                Console.WriteLine($"It came to here");
+                if (authTemplate == null)
+                    return BadRequest("AuthTemplate body is required");
+
+                if (string.IsNullOrWhiteSpace(authTemplate.TemplateName))
+                    return BadRequest("TemplateName is required");
+
+                if (string.IsNullOrWhiteSpace(authTemplate.JsonContent))
+                    return BadRequest("JsonContent is required");
+
                 if (authTemplate == null || authTemplate.JsonContent == null || !authTemplate.JsonContent.Any() || authTemplate.TemplateName == null)
                 {
                     return BadRequest("Invalid data received");
                 }
-
-                await _getAuthTemplatesQuery.ExecuteAsync(authTemplate);
+                Console.WriteLine($"It came to here 2");
+                await _getAuthTemplatesQuery.ExecuteAsync(authTemplate, authTemplate.module);
+                Console.WriteLine($"It came to here 10");
                 return Ok("Data saved successfully");
             }
             catch (Exception ex)

@@ -21,18 +21,25 @@ namespace CareNirvana.Service.Infrastructure.Repository
         }
 
 
-        public async Task<List<AuthTemplate>> GetAllAsync(int classId)
+        public async Task<List<AuthTemplate>> GetAllAsync(int classId, string module)
         {
             var templates = new List<AuthTemplate>();
 
             using (var connection = new NpgsqlConnection(_connectionString))
             {
                 await connection.OpenAsync();
-
-                var query = "SELECT id, templatename, createdon, createdby, authclassid FROM authtemplate";
-                if (classId > 0)
+                var query = string.Empty;
+                if (module == "UM")
                 {
-                    query += " WHERE authclassid = @classid";
+                    query = "SELECT authtemplateid, authtemplatename, cat.createdon, cat.createdby, su.username, authclassid FROM cfgauthtemplate cat join securityuser su on su.userid=cat.createdby ORDER BY COALESCE(cat.updatedon, cat.createdon) DESC";
+                    if (classId > 0)
+                    {
+                        query += " WHERE authclassid = @classid";
+                    }
+                }
+                else if (module == "AG")
+                {
+                    query = "SELECT casetemplateid, casetemplatename, cct.createdon, cct.createdby, su.username FROM cfgcasetemplate cct join securityuser su on su.userid=cct.createdby ORDER BY COALESCE(cct.updatedon, cct.createdon) DESC";
                 }
 
                 using (var command = new NpgsqlCommand(query, connection))
@@ -52,42 +59,71 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                 TemplateName = reader.GetString(1),
                                 CreatedOn = reader.GetDateTime(2),
                                 CreatedBy = reader.GetInt32(3),
-                                authclassid = reader.IsDBNull(4) ? null : reader.GetInt32(4)
+                                CreatedByUser = reader.GetString(4),
+                                authclassid = module == "UM" && !reader.IsDBNull(5) ? reader.GetInt32(5) : (int?)null
                             });
                         }
                     }
                 }
+
             }
 
             return templates;
         }
 
 
-        public async Task<List<AuthTemplate>> GetAuthTemplate(int id)
+        public async Task<List<AuthTemplate>> GetAuthTemplate(int id, string module)
         {
             var templates = new List<AuthTemplate>();
             using (var connection = new NpgsqlConnection(_connectionString))
             {
                 await connection.OpenAsync();
-                // Add WHERE clause with parameterized query
-                using (var command = new NpgsqlCommand("SELECT id, templatename, jsoncontent, createdon, createdby, authclassid FROM authtemplate WHERE id = @id", connection))
+                if (module == "UM")
                 {
-                    // Add parameter for id
-                    command.Parameters.AddWithValue("@id", id);
-
-                    using (var reader = await command.ExecuteReaderAsync())
+                    // Add WHERE clause with parameterized query
+                    using (var command = new NpgsqlCommand("SELECT authtemplateid, authtemplatename,jsoncontent, createdon, createdby, authclassid FROM cfgauthtemplate WHERE authtemplateid = @id", connection))
                     {
-                        while (await reader.ReadAsync())
+                        // Add parameter for id
+                        command.Parameters.AddWithValue("@id", id);
+
+                        using (var reader = await command.ExecuteReaderAsync())
                         {
-                            templates.Add(new AuthTemplate
+                            while (await reader.ReadAsync())
                             {
-                                Id = reader.GetInt32(0),
-                                TemplateName = reader.GetString(1),
-                                JsonContent = reader.GetString(2),
-                                CreatedOn = reader.GetDateTime(3),
-                                CreatedBy = reader.GetInt32(4),
-                                authclassid = reader.IsDBNull(5) ? null : reader.GetInt32(5)
-                            });
+                                templates.Add(new AuthTemplate
+                                {
+                                    Id = reader.GetInt32(0),
+                                    TemplateName = reader.GetString(1),
+                                    JsonContent = reader.GetString(2),
+                                    CreatedOn = reader.GetDateTime(3),
+                                    CreatedBy = reader.GetInt32(4),
+                                    authclassid = reader.IsDBNull(5) ? null : reader.GetInt32(5)
+                                });
+                            }
+                        }
+                    }
+                }
+                else if (module == "AG")
+                {
+                    using (var command = new NpgsqlCommand("SELECT casetemplateid, casetemplatename, jsoncontent, createdon, createdby FROM cfgcasetemplate WHERE casetemplateid = @id", connection))
+                    {
+                        // Add parameter for id
+                        command.Parameters.AddWithValue("@id", id);
+
+                        using (var reader = await command.ExecuteReaderAsync())
+                        {
+                            while (await reader.ReadAsync())
+                            {
+                                templates.Add(new AuthTemplate
+                                {
+                                    Id = reader.GetInt32(0),
+                                    TemplateName = reader.GetString(1),
+                                    JsonContent = reader.GetString(2),
+                                    CreatedOn = reader.GetDateTime(3),
+                                    CreatedBy = reader.GetInt32(4),
+                                    authclassid = null
+                                });
+                            }
                         }
                     }
                 }
@@ -95,52 +131,101 @@ namespace CareNirvana.Service.Infrastructure.Repository
             return templates;
         }
 
-        public async Task SaveAsync(AuthTemplate authTemplate)
+        public async Task SaveAsync(AuthTemplate authTemplate, string module)
         {
             try
             {
-                if (authTemplate.Id == 0)
-                {
-                    using (var connection = new NpgsqlConnection(_connectionString))
-                    {
-                        await connection.OpenAsync();
-                        using (var command = new NpgsqlCommand(
-                            "INSERT INTO authtemplate (jsoncontent, createdby, createdon,templatename, authclassid) VALUES (@JsonContent::jsonb, @createdby,@createdon, @templateName, @authclassid)", connection))
-                        {
-                            // Ensure the data is inserted as a JSONB array
-                            command.Parameters.AddWithValue("@JsonContent", authTemplate.JsonContent);
-                            command.Parameters.AddWithValue("@createdby", authTemplate.CreatedBy);
-                            command.Parameters.AddWithValue("@createdon", authTemplate.CreatedOn);
-                            command.Parameters.AddWithValue("@templateName", authTemplate.TemplateName);
-                            command.Parameters.AddWithValue("@authclassid", authTemplate.authclassid);
-                            // Explicitly set the parameter type as jsonb
-                            command.Parameters["@JsonContent"].NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Jsonb;
+                Console.WriteLine($"It came to here 3");
 
-                            await command.ExecuteNonQueryAsync();
+                Console.WriteLine($"Module: {module}");
+                if (module == "UM")
+                {
+                    if (authTemplate.Id == 0)
+                    {
+                        using (var connection = new NpgsqlConnection(_connectionString))
+                        {
+                            await connection.OpenAsync();
+                            using (var command = new NpgsqlCommand(
+                                "INSERT INTO cfgauthtemplate (jsoncontent, createdby, createdon, authtemplatename, authclassid, enrollmenthierarhcyid) VALUES (@JsonContent::jsonb, @createdby,@createdon, @templateName, @authclassid, @enrollmenthierarhcyid)", connection))
+                            {
+                                // Ensure the data is inserted as a JSONB array
+                                command.Parameters.AddWithValue("@JsonContent", authTemplate.JsonContent);
+                                command.Parameters.AddWithValue("@createdby", authTemplate.CreatedBy);
+                                command.Parameters.AddWithValue("@createdon", authTemplate.CreatedOn);
+                                command.Parameters.AddWithValue("@templateName", authTemplate.TemplateName);
+                                command.Parameters.AddWithValue("@authclassid", authTemplate.authclassid);
+                                command.Parameters.AddWithValue("@enrollmenthierarhcyid", authTemplate.EnrollmentHierarchyId ?? (object)DBNull.Value);
+                                // Explicitly set the parameter type as jsonb
+                                command.Parameters["@JsonContent"].NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Jsonb;
+
+                                await command.ExecuteNonQueryAsync();
+                            }
+                        }
+                    }
+                    else
+                    {
+                        using (var connection = new NpgsqlConnection(_connectionString))
+                        {
+                            await connection.OpenAsync();
+                            using (var command = new NpgsqlCommand(
+                                "UPDATE cfgauthtemplate SET jsoncontent = @JsonContent::jsonb, updatedby = @updatedby, updatedon = @updatedon, authtemplatename = @templateName WHERE authtemplateid = @id", connection))
+                            {
+                                command.Parameters.AddWithValue("@JsonContent", authTemplate.JsonContent);
+                                command.Parameters.AddWithValue("@updatedby", authTemplate.CreatedBy);
+                                command.Parameters.AddWithValue("@updatedon", authTemplate.CreatedOn);
+                                command.Parameters.AddWithValue("@templateName", authTemplate.TemplateName);
+                                command.Parameters.Add("@id", NpgsqlTypes.NpgsqlDbType.Integer).Value = authTemplate.Id!.Value;
+                                // Explicitly set the parameter type for JSONB
+                                command.Parameters["@JsonContent"].NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Jsonb;
+
+                                await command.ExecuteNonQueryAsync();
+                            }
                         }
                     }
                 }
-                else
+                else if (module == "AG")
                 {
-                    using (var connection = new NpgsqlConnection(_connectionString))
+                    Console.WriteLine($"It came to here AG");
+                    if (authTemplate.Id == 0)
                     {
-                        await connection.OpenAsync();
-                        using (var command = new NpgsqlCommand(
-                            "UPDATE authtemplate SET jsoncontent = @JsonContent::jsonb, updatedby = @updatedby, updatedon = @updatedon, templatename = @templateName WHERE id = @id", connection))
+                        using (var connection = new NpgsqlConnection(_connectionString))
                         {
-                            command.Parameters.AddWithValue("@JsonContent", authTemplate.JsonContent);
-                            command.Parameters.AddWithValue("@updatedby", authTemplate.CreatedBy);
-                            command.Parameters.AddWithValue("@updatedon", authTemplate.CreatedOn);
-                            command.Parameters.AddWithValue("@templateName", authTemplate.TemplateName);
-                            //command.Parameters.AddWithValue("@id", authTemplate.Id);
+                            await connection.OpenAsync();
+                            using (var command = new NpgsqlCommand(
+                                "INSERT INTO cfgcasetemplate (jsoncontent, createdby, createdon, casetemplatename, enrollmenthierarhcyid) VALUES (@JsonContent::jsonb, @createdby,@createdon, @templateName, @enrollmenthierarhcyid)", connection))
+                            {
+                                // Ensure the data is inserted as a JSONB array
+                                command.Parameters.AddWithValue("@JsonContent", authTemplate.JsonContent);
+                                command.Parameters.AddWithValue("@createdby", authTemplate.CreatedBy);
+                                command.Parameters.AddWithValue("@createdon", authTemplate.CreatedOn);
+                                command.Parameters.AddWithValue("@templateName", authTemplate.TemplateName);
+                                command.Parameters.AddWithValue("@enrollmenthierarhcyid", authTemplate.EnrollmentHierarchyId ?? (object)DBNull.Value);
+                                // Explicitly set the parameter type as jsonb
+                                command.Parameters["@JsonContent"].NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Jsonb;
 
-                            command.Parameters.Add("@id", NpgsqlTypes.NpgsqlDbType.Integer).Value = authTemplate.Id!.Value;
+                                await command.ExecuteNonQueryAsync();
+                            }
+                        }
+                    }
+                    else
+                    {
+                        using (var connection = new NpgsqlConnection(_connectionString))
+                        {
+                            await connection.OpenAsync();
+                            using (var command = new NpgsqlCommand(
+                                "UPDATE cfgcasetemplate SET jsoncontent = @JsonContent::jsonb, updatedby = @updatedby, updatedon = @updatedon, casetemplatename = @templateName WHERE casetemplateid = @id", connection))
+                            {
+                                command.Parameters.AddWithValue("@JsonContent", authTemplate.JsonContent);
+                                command.Parameters.AddWithValue("@updatedby", authTemplate.CreatedBy);
+                                command.Parameters.AddWithValue("@updatedon", authTemplate.CreatedOn);
+                                command.Parameters.AddWithValue("@templateName", authTemplate.TemplateName);
+                                command.Parameters.Add("@id", NpgsqlTypes.NpgsqlDbType.Integer).Value = authTemplate.Id!.Value;
 
+                                // Explicitly set the parameter type for JSONB
+                                command.Parameters["@JsonContent"].NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Jsonb;
 
-                            // Explicitly set the parameter type for JSONB
-                            command.Parameters["@JsonContent"].NpgsqlDbType = NpgsqlTypes.NpgsqlDbType.Jsonb;
-
-                            await command.ExecuteNonQueryAsync();
+                                await command.ExecuteNonQueryAsync();
+                            }
                         }
                     }
                 }

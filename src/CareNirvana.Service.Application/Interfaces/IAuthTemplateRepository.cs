@@ -9,9 +9,9 @@ namespace CareNirvana.Service.Application.Interfaces
 {
     public interface IAuthTemplateRepository
     {
-        Task<List<AuthTemplate>> GetAllAsync(int authClassId);
-        Task<List<AuthTemplate>> GetAuthTemplate(int id);
-        Task SaveAsync(AuthTemplate authTemplate);
+        Task<List<AuthTemplate>> GetAllAsync(int authClassId, string module);
+        Task<List<AuthTemplate>> GetAuthTemplate(int id, string module);
+        Task SaveAsync(AuthTemplate authTemplate, string module);
 
         Task<AuthTemplateValidation?> GetByTemplateIdAsync(int templateId);
         Task InsertAsync(AuthTemplateValidation entity);

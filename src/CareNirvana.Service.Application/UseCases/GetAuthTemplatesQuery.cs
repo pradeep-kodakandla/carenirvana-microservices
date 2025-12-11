@@ -18,16 +18,16 @@ namespace CareNirvana.Service.Application.UseCases
             _repository = repository;
         }
 
-        public async Task<List<AuthTemplate>> ExecuteAsync(int authclassId)
+        public async Task<List<AuthTemplate>> ExecuteAsync(int authclassId, string module)
         {
-            return await _repository.GetAllAsync(authclassId);
+            return await _repository.GetAllAsync(authclassId, module);
         }
 
-        public async Task<List<AuthTemplate>> GetTemplate(int id)
+        public async Task<List<AuthTemplate>> GetTemplate(int id, string module)
         {
-            return await _repository.GetAuthTemplate(id);
+            return await _repository.GetAuthTemplate(id,module);
         }
-        public async Task ExecuteAsync(AuthTemplate authTemplate)
+        public async Task ExecuteAsync(AuthTemplate authTemplate, string module)
         {
             var AuthTemplate = new AuthTemplate
             {
@@ -38,7 +38,7 @@ namespace CareNirvana.Service.Application.UseCases
                 CreatedBy = authTemplate.CreatedBy,
             };
 
-            await _repository.SaveAsync(authTemplate);
+            await _repository.SaveAsync(authTemplate, module);
         }
 
         public async Task<AuthTemplateValidation?> GetByTemplateIdAsync(int templateId)
