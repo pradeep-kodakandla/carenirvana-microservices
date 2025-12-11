@@ -31,11 +31,12 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 var query = string.Empty;
                 if (module == "UM")
                 {
-                    query = "SELECT authtemplateid, authtemplatename, cat.createdon, cat.createdby, su.username, authclassid FROM cfgauthtemplate cat join securityuser su on su.userid=cat.createdby ORDER BY COALESCE(cat.updatedon, cat.createdon) DESC";
+                    query = "SELECT authtemplateid, authtemplatename, cat.createdon, cat.createdby, su.username, authclassid FROM cfgauthtemplate cat join securityuser su on su.userid=cat.createdby";
                     if (classId > 0)
                     {
                         query += " WHERE authclassid = @classid";
                     }
+                    query += " ORDER BY COALESCE(cat.updatedon, cat.createdon) DESC";
                 }
                 else if (module == "AG")
                 {
