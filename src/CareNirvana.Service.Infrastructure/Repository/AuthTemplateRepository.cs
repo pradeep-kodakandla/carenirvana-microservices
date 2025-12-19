@@ -136,7 +136,6 @@ namespace CareNirvana.Service.Infrastructure.Repository
         {
             try
             {
-                Console.WriteLine($"It came to here 3");
 
                 Console.WriteLine($"Module: {module}");
                 if (module == "UM")
@@ -186,7 +185,6 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 }
                 else if (module == "AG")
                 {
-                    Console.WriteLine($"It came to here AG");
                     if (authTemplate.Id == 0)
                     {
                         using (var connection = new NpgsqlConnection(_connectionString))

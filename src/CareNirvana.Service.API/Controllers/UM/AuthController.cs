@@ -66,7 +66,6 @@ namespace CareNirvana.Service.API.Controllers
         {
             try
             {
-                Console.WriteLine($"It came to here");
                 if (authTemplate == null)
                     return BadRequest("AuthTemplate body is required");
 
@@ -80,9 +79,8 @@ namespace CareNirvana.Service.API.Controllers
                 {
                     return BadRequest("Invalid data received");
                 }
-                Console.WriteLine($"It came to here 2");
                 await _getAuthTemplatesQuery.ExecuteAsync(authTemplate, authTemplate.module);
-                Console.WriteLine($"It came to here 10");
+
                 return Ok("Data saved successfully");
             }
             catch (Exception ex)

@@ -17,13 +17,13 @@ namespace CareNirvana.Service.Infrastructure.Repository
         public async Task<int> InsertMemberProgramAsync(MemberProgram mp)
         {
             const string sql = @"
-INSERT INTO memberprogram
-(memberdetailsid, programid, memberenrollmentid, programstatusid, programstatusreasonid, programreferralsourceid,
- assignedto, startdate, enddate, activeflag, createdon, createdby, updatedon, updatedby)
-VALUES
-(@memberdetailsid, @programid, @memberenrollmentid, @programstatusid, @programstatusreasonid, @programreferralsourceid,
- @assignedto, @startdate, @enddate, COALESCE(@activeflag, TRUE), COALESCE(@createdon, NOW()), @createdby, @updatedon, @updatedby)
-RETURNING memberprogramid;";
+                INSERT INTO memberprogram
+                (memberdetailsid, programid, memberenrollmentid, programstatusid, programstatusreasonid, programreferralsourceid,
+                 assignedto, startdate, enddate, activeflag, createdon, createdby, updatedon, updatedby)
+                VALUES
+                (@memberdetailsid, @programid, @memberenrollmentid, @programstatusid, @programstatusreasonid, @programreferralsourceid,
+                 @assignedto, @startdate, @enddate, COALESCE(@activeflag, TRUE), COALESCE(@createdon, NOW()), @createdby, @updatedon, @updatedby)
+                RETURNING memberprogramid;";
 
             using var conn = new NpgsqlConnection(_connectionString);
             await conn.OpenAsync();
