@@ -31,7 +31,19 @@ namespace CareNirvana.Service.Infrastructure.Repository
             await using var conn = GetConnection();
             await conn.OpenAsync();
 
-            var query = "SELECT jsoncontent -> @section AS section_data FROM cfgadmindata WHERE UPPER(module) = @module AND jsoncontent ? @section";
+            const string query = @"
+                SELECT
+                  CASE
+                    WHEN @section IS NULL OR @section = '' THEN jsoncontent
+                    ELSE jsoncontent -> @section
+                  END AS section_data
+                FROM cfgadmindata
+                WHERE UPPER(module) = @module
+                  AND (
+                        @section IS NULL OR @section = ''
+                        OR jsoncontent ? @section
+                      );
+                ";
             await using var cmd = new NpgsqlCommand(query, conn);
             cmd.Parameters.AddWithValue("module", module);
             cmd.Parameters.AddWithValue("section", section);
