@@ -185,4 +185,11 @@ public class DashBoardController : ControllerBase
         var results = await _dashBoardService.SearchMembersAsync(criteria);
         return Ok(results);
     }
+
+    [HttpGet("agcases/{userId}")]
+    public async Task<ActionResult<IReadOnlyList<AgCaseRow>>> GetAgCases(int userId, CancellationToken ct = default)
+    {
+        var results = await _dashBoardService.GetAgCasesAsync(userId, ct);
+        return Ok(results);
+    }
 }

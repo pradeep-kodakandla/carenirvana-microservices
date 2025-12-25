@@ -242,4 +242,37 @@ namespace CareNirvana.Service.Domain.Model
         public string? ZipCode { get; set; }
     }
 
+    public sealed class AgCaseRow
+    {
+        public string? CaseNumber { get; set; }
+        public int? MemberDetailId { get; set; }
+
+        // Stored id from CASEHEADER
+        public string? CaseType { get; set; }
+        public string? CaseTypeText { get; set; }
+
+        public string? MemberName { get; set; }
+        public string? MemberId { get; set; }
+
+        public string? CreatedByUserName { get; set; }
+        public int? CreatedBy { get; set; }
+        public DateTime? CreatedOn { get; set; }
+
+        public int? CaseLevelId { get; set; }
+        public int? LevelId { get; set; }
+
+        // From JSON (usually an id)
+        public string? CasePriority { get; set; }
+        public string? CasePriorityText { get; set; }
+
+        public DateTimeOffset? ReceivedDateTime { get; set; }
+
+        // From JSON (usually an id)
+        public string? CaseStatusId { get; set; }
+        public string? CaseStatusText { get; set; }
+
+        public DateTime? LastDetailOn { get; set; }
+    }
+
+
 }

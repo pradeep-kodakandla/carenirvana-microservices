@@ -27,5 +27,6 @@ namespace CareNirvana.Service.Application.Interfaces
         Task<List<ActivityRequestItem>> GetRequestActivitiesAsync(int? userId = null);
 
         Task<IEnumerable<MemberSearchResultDto>> SearchMembersAsync(MemberSearchCriteriaDto criteria);
+        Task<IReadOnlyList<AgCaseRow>> GetAgCasesAsync(int userId, CancellationToken ct = default);
     }
 }
