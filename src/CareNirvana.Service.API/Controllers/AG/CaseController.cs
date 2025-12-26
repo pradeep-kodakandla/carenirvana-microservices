@@ -30,7 +30,7 @@ public class CaseController : ControllerBase
         return Ok(caseAggregate);
     }
 
-    [HttpGet("ByHeader/{caseHeaderId:long}")]  
+    [HttpGet("ByHeader/{caseHeaderId:long}")]
     public async Task<IActionResult> GetCaseByHeaderId(long caseHeaderId, [FromQuery] bool includeDeleted = false)
     {
         if (caseHeaderId <= 0)
@@ -140,6 +140,15 @@ public class CaseController : ControllerBase
             statusList,
             includeDeleted);
 
+        return Ok(cases);
+    }
+
+    [HttpGet("AgCasesByMember/{memberDetailId:int}")]
+    public async Task<IActionResult> GetAgCasesByMemberDetailId(
+        int memberDetailId,
+        CancellationToken ct = default)
+    {
+        var cases = await _caseRepository.GetAgCasesByMemberAsync(memberDetailId, ct);
         return Ok(cases);
     }
 

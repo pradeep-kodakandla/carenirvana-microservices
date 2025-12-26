@@ -389,5 +389,77 @@ namespace CareNirvana.Service.Infrastructure.Repository
             await using var conn = CreateConn();
             await conn.ExecuteAsync(sql, new { caseDetailId, userId });
         }
+
+        public async Task<IReadOnlyList<AgCaseRow>> GetAgCasesByMemberAsync(int memberDetailId, CancellationToken ct = default)
+        {
+            const string sql = @"
+                                WITH admin AS (
+                                  SELECT jsoncontent::jsonb AS j
+                                  FROM cfgadmindata
+                                  WHERE module = 'AG'
+                                  ORDER BY COALESCE(updatedon, createdon) DESC NULLS LAST
+                                  LIMIT 1
+                                ),
+                                casetype_lu AS (
+                                  SELECT (x ->> 'id') AS id, (x ->> 'caseType') AS casetype_name
+                                  FROM admin
+                                  CROSS JOIN LATERAL jsonb_array_elements(admin.j -> 'casetype') x
+                                ),
+                                casestatus_lu AS (
+                                  SELECT (x ->> 'id') AS id, (x ->> 'caseStatus') AS casestatus_name
+                                  FROM admin
+                                  CROSS JOIN LATERAL jsonb_array_elements(admin.j -> 'casestatus') x
+                                ),
+                                casepriority_lu AS (
+                                  SELECT (x ->> 'id') AS id, (x ->> 'casePriority') AS casepriority_name
+                                  FROM admin
+                                  CROSS JOIN LATERAL jsonb_array_elements(admin.j -> 'casepriority') x
+                                )
+                                SELECT
+                                  ch.casenumber                                  AS ""CaseNumber"",
+                                  ch.memberdetailid                              AS ""MemberDetailId"",
+                                  ch.casetype::text                              AS ""CaseType"",
+                                  COALESCE(ct.casetype_name, ch.casetype::text)  AS ""CaseTypeText"",
+                                  concat_ws(' ', md.firstname, md.lastname)      AS ""MemberName"",
+                                  md.memberid                                    AS ""MemberId"",
+                                  su.username                                    AS ""CreatedByUserName"",
+                                  ch.createdby                                   AS ""CreatedBy"",
+                                  ch.createdon                                   AS ""CreatedOn"",
+                                  cd.caselevelid                                 AS ""CaseLevelId"",
+                                  (cd.jsondata::jsonb ->> 'Case_Overview_casePriority') AS ""CasePriority"",
+                                  COALESCE(cp.casepriority_name,
+                                           (cd.jsondata::jsonb ->> 'Case_Overview_casePriority')) AS ""CasePriorityText"",
+                                  NULLIF(cd.jsondata::jsonb ->> 'Case_Overview_receivedDateTime','')::timestamptz
+                                                                                AS ""ReceivedDateTime"",
+                                  (cd.jsondata::jsonb ->> 'Case_Status_Details_caseStatus') AS ""CaseStatusId"",
+                                  COALESCE(cs.casestatus_name,
+                                           (cd.jsondata::jsonb ->> 'Case_Status_Details_caseStatus')) AS ""CaseStatusText"",
+                                  COALESCE(cd.updatedon, cd.createdon)            AS ""LastDetailOn""
+                                FROM caseheader ch
+                                JOIN LATERAL (
+                                  SELECT d.*
+                                  FROM casedetail d
+                                  WHERE d.caseheaderid = ch.caseheaderid
+                                  ORDER BY d.caselevelid DESC NULLS LAST,
+                                           COALESCE(d.updatedon, d.createdon) DESC NULLS LAST,
+                                           d.casedetailid DESC
+                                  LIMIT 1
+                                ) cd ON TRUE
+                                JOIN memberdetails md ON md.memberdetailsid = ch.memberdetailid
+                                JOIN securityuser  su ON su.userid = ch.createdby
+                                LEFT JOIN casetype_lu    ct ON ct.id = ch.casetype::text
+                                LEFT JOIN casestatus_lu  cs ON cs.id = (cd.jsondata::jsonb ->> 'Case_Status_Details_caseStatus')
+                                LEFT JOIN casepriority_lu cp ON cp.id = (cd.jsondata::jsonb ->> 'Case_Overview_casePriority')
+                                WHERE ch.memberdetailid = @memberId
+                                ORDER BY COALESCE(cd.updatedon, cd.createdon) DESC NULLS LAST;
+                                ";
+
+            await using var conn = new NpgsqlConnection(_connStr);
+            var rows = await conn.QueryAsync<AgCaseRow>(new CommandDefinition(sql, new { memberId = memberDetailId }, cancellationToken: ct));
+            //var cmd = new CommandDefinition(sql, cancellationToken: ct);
+
+            //var rows = await conn.QueryAsync<AgCaseRow>(cmd);
+            return rows.AsList();
+        }
     }
 }
