@@ -16,12 +16,20 @@ namespace CareNirvana.Service.API.Controllers.Admin
             _configAdminService = configAdminService;
         }
 
-        [HttpGet("{module}/{section}")]
-        public async Task<IActionResult> GetSectionData(string module, string section)
+        //[HttpGet("{module}/{section}")]
+        //public async Task<IActionResult> GetSectionData(string module, string section)
+        //{
+        //    var result = await _configAdminService.GetSectionData(module, section);
+        //    if (result == null)
+        //        return NotFound(new { message = "No data found for this section" });
+        //    return Ok(result);
+        //}
+
+        [HttpGet("{module}/{section?}")]
+        public async Task<IActionResult> GetSectionData(string module, string? section = null)
         {
             var result = await _configAdminService.GetSectionData(module, section);
-            if (result == null)
-                return NotFound(new { message = "No data found for this section" });
+            if (result == null) return NotFound(new { message = "No data found" });
             return Ok(result);
         }
 

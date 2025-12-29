@@ -6,8 +6,6 @@ using Microsoft.AspNetCore.Mvc;
 [Route("api/[controller]")]
 [ApiController]
 
-
-
 public class CaseController : ControllerBase
 {
     private readonly ICaseRepository _caseRepository;
@@ -151,6 +149,4 @@ public class CaseController : ControllerBase
         var cases = await _caseRepository.GetAgCasesByMemberAsync(memberDetailId, ct);
         return Ok(cases);
     }
-
-
 }

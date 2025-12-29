@@ -25,35 +25,76 @@ namespace CareNirvana.Service.Infrastructure.Repository
             return new NpgsqlConnection(_connectionString);
         }
 
-        public async Task<JsonElement?> GetSectionData(string module, string section)
+        //public async Task<JsonElement?> GetSectionData(string module, string? section)
+        //{
+        //    module = module.ToUpper();
+        //    await using var conn = GetConnection();
+        //    await conn.OpenAsync();
+
+
+        //    const string query = @"
+        //          SELECT
+        //            CASE
+        //              WHEN @section IS NULL OR @section = '' THEN jsoncontent
+        //              ELSE jsoncontent -> @section
+        //            END AS section_data
+        //          FROM cfgadmindata
+        //          WHERE UPPER(module) = @module
+        //            AND (
+        //                  @section IS NULL OR @section = ''
+        //                  OR jsoncontent ? @section
+        //                )
+        //          LIMIT 1;
+        //        ";
+        //    await using var cmd = new NpgsqlCommand(query, conn);
+        //    cmd.Parameters.AddWithValue("module", module);
+        //    cmd.Parameters.AddWithValue("section", section);
+
+        //    await using var reader = await cmd.ExecuteReaderAsync();
+        //    if (!reader.HasRows)
+        //        return null;
+
+        //    await reader.ReadAsync();
+        //    return JsonDocument.Parse(reader["section_data"].ToString()).RootElement;
+        //}
+
+        public async Task<JsonElement?> GetSectionData(string module, string? section)
         {
-            module = module.ToUpper();
+            module = module.ToUpperInvariant();
+
             await using var conn = GetConnection();
             await conn.OpenAsync();
 
             const string query = @"
-                SELECT
-                  CASE
-                    WHEN @section IS NULL OR @section = '' THEN jsoncontent
-                    ELSE jsoncontent -> @section
-                  END AS section_data
-                FROM cfgadmindata
-                WHERE UPPER(module) = @module
-                  AND (
-                        @section IS NULL OR @section = ''
-                        OR jsoncontent ? @section
-                      );
+                  SELECT
+                    CASE
+                      WHEN @section IS NULL OR @section = '' THEN jsoncontent
+                      ELSE jsoncontent -> @section
+                    END AS section_data
+                  FROM cfgadmindata
+                  WHERE UPPER(module) = @module
+                    AND (
+                          @section IS NULL OR @section = ''
+                          OR jsoncontent ? @section
+                        )
+                  LIMIT 1;
                 ";
+
             await using var cmd = new NpgsqlCommand(query, conn);
+
             cmd.Parameters.AddWithValue("module", module);
-            cmd.Parameters.AddWithValue("section", section);
+
+            // IMPORTANT: send NULL properly
+            var p = cmd.Parameters.Add("section", NpgsqlTypes.NpgsqlDbType.Text);
+            p.Value = (object?)section ?? DBNull.Value;
 
             await using var reader = await cmd.ExecuteReaderAsync();
-            if (!reader.HasRows)
-                return null;
+            if (!await reader.ReadAsync()) return null;
 
-            await reader.ReadAsync();
-            return JsonDocument.Parse(reader["section_data"].ToString()).RootElement;
+            var raw = reader["section_data"]?.ToString();
+            if (string.IsNullOrWhiteSpace(raw)) return null;
+
+            return JsonDocument.Parse(raw).RootElement;
         }
 
         public async Task<JsonElement> AddEntry(string module, string section, JsonElement newEntry)
