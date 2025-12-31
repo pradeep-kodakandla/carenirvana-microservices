@@ -182,5 +182,209 @@ namespace CareNirvana.Service.Infrastructure.Repository
             await cmd.ExecuteNonQueryAsync();
             return entity;
         }
+
+        public async Task<IReadOnlyList<CodeSearchResult>> SearchIcdAsync(
+            string q,
+            int limit = 25,
+            CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 2)
+                return Array.Empty<CodeSearchResult>();
+
+            q = q.Trim();
+
+            await using var conn = GetConnection();
+            await conn.OpenAsync(ct);
+
+            const string sql = @"
+                SELECT icdcodeid, code, codedescription, codeshortdescription
+                FROM cfgicdcodesmaster
+                WHERE (activeflag IS NULL OR activeflag <> 'N')
+                  AND (
+                        code ILIKE @starts
+                     OR codedescription ILIKE @contains
+                     OR codeshortdescription ILIKE @contains
+                  )
+                ORDER BY
+                    CASE WHEN code ILIKE @starts THEN 0 ELSE 1 END,
+                    LENGTH(code),
+                    code
+                LIMIT @limit;";
+
+            await using var cmd = new NpgsqlCommand(sql, conn);
+
+            // ✅ consistent parameter names
+            cmd.Parameters.AddWithValue("starts", $"{q}%");
+            cmd.Parameters.AddWithValue("contains", $"%{q}%");
+            cmd.Parameters.AddWithValue("limit", limit);
+
+            var results = new List<CodeSearchResult>(limit);
+
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                results.Add(new CodeSearchResult
+                {
+                    Id = reader["icdcodeid"] != DBNull.Value ? Convert.ToInt32(reader["icdcodeid"]) : null,
+                    code = reader["code"]?.ToString(),
+                    codeDesc = reader["codedescription"]?.ToString(),
+                    codeShortDesc = reader["codeshortdescription"]?.ToString(),
+                    type = "ICD"
+                });
+            }
+
+            return results;
+        }
+
+        public async Task<IReadOnlyList<CodeSearchResult>> SearchMedicalCodesAsync(
+            string q,
+            int limit = 25,
+            CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 2)
+                return Array.Empty<CodeSearchResult>();
+
+            q = q.Trim();
+
+            await using var conn = GetConnection();
+            await conn.OpenAsync(ct);
+
+            const string sql = @"
+                SELECT medicalcodemasterid, code, codedescription, codeshortdescription
+                FROM cfgmedicalcodesmaster
+                WHERE (activeflag IS NULL OR activeflag <> 'N')
+                  AND (
+                        code ILIKE @starts
+                     OR codedescription ILIKE @contains
+                     OR codeshortdescription ILIKE @contains
+                  )
+                ORDER BY
+                    CASE WHEN code ILIKE @starts THEN 0 ELSE 1 END,
+                    LENGTH(code),
+                    code
+                LIMIT @limit;";
+
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("starts", $"{q}%");
+            cmd.Parameters.AddWithValue("contains", $"%{q}%");
+            cmd.Parameters.AddWithValue("limit", limit);
+
+            var results = new List<CodeSearchResult>(limit);
+
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                results.Add(new CodeSearchResult
+                {
+                    Id = reader["medicalcodemasterid"] != DBNull.Value ? Convert.ToInt32(reader["medicalcodemasterid"]) : null,
+                    code = reader["code"]?.ToString(),
+                    codeDesc = reader["codedescription"]?.ToString(),
+                    codeShortDesc = reader["codeshortdescription"]?.ToString(),
+                    type = "CPT"
+                });
+            }
+
+            return results;
+        }
+
+        public async Task<IReadOnlyList<MemberSearchResult>> SearchMembersAsync(
+            string q,
+            int limit = 25,
+            CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 2)
+                return Array.Empty<MemberSearchResult>();
+
+            q = q.Trim();
+            var qDigits = new string(q.Where(char.IsDigit).ToArray()); // for phone search
+
+            await using var conn = GetConnection();
+            await conn.OpenAsync(ct);
+
+            const string sql = @"
+                select
+                    md.firstname,
+                    md.lastname,
+                    md.memberid,
+                    md.memberdetailsid,
+                    to_char(md.birthdate::date, 'MM-DD-YYYY') as birthdate,
+                    ma.city,
+                    mp.phone,
+                    gen.gender
+                from memberdetails md
+
+                -- ✅ pick ONE primary address row (if multiple)
+                left join lateral (
+                    select a.city
+                    from memberaddress a
+                    where a.memberdetailsid = md.memberdetailsid
+                      and a.isprimary = true
+                    order by a.memberaddressid desc
+                    limit 1
+                ) ma on true
+
+                -- ✅ pick ONE preferred phone row (if multiple)
+                left join lateral (
+                    select p.phonenumber::text as phone
+                    from memberphonenumber p
+                    where p.memberdetailsid = md.memberdetailsid
+                      and p.ispreferred = true
+                    order by p.memberphonenumberid desc
+                    limit 1
+                ) mp on true
+
+                left join lateral (
+                    select elem->>'gender' as gender
+                    from cfgadmindata cad,
+                         jsonb_array_elements(cad.jsoncontent::jsonb->'gender') elem
+                    where (elem->>'id')::int = md.genderid
+                      and cad.module = 'ADMIN'
+                    limit 1
+                ) gen on true
+
+                where
+                    md.memberid::text ILIKE @starts
+                 OR md.firstname ILIKE @contains
+                 OR md.lastname ILIKE @contains
+                 OR (
+                      @digits <> ''
+                      AND regexp_replace(coalesce(mp.phone,''), '\D', '', 'g') ILIKE '%' || @digits || '%'
+                    )
+
+                order by
+                    case when md.memberid::text ILIKE @starts then 0 else 1 end,
+                    case when md.lastname ILIKE @contains then 0 else 1 end,
+                    md.lastname,
+                    md.firstname
+                limit @limit;";
+
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("starts", $"{q}%");
+            cmd.Parameters.AddWithValue("contains", $"%{q}%");
+            cmd.Parameters.AddWithValue("digits", qDigits);
+            cmd.Parameters.AddWithValue("limit", limit);
+
+            var results = new List<MemberSearchResult>(limit);
+
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                results.Add(new MemberSearchResult
+                {
+                    memberdetailsid = Convert.ToInt32(reader["memberdetailsid"]),
+                    memberid = reader["memberid"]?.ToString(),
+                    firstname = reader["firstname"]?.ToString(),
+                    lastname = reader["lastname"]?.ToString(),
+                    birthdate = reader["birthdate"]?.ToString(),
+                    city = reader["city"]?.ToString(),
+                    phone = reader["phone"]?.ToString(),
+                    gender = reader["gender"]?.ToString()
+                });
+            }
+
+            return results;
+        }
+
+
     }
 }

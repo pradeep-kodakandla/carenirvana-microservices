@@ -36,5 +36,18 @@ namespace CareNirvana.Service.Application.UseCases
         {
             return await _repository.UpdateAsync(entity);
         }
+        public async Task<IReadOnlyList<CodeSearchResult>> SearchIcdAsync(string q, int limit = 25, CancellationToken ct = default)
+        {
+            return await _repository.SearchIcdAsync(q, limit, ct);
+        }
+        public async Task<IReadOnlyList<CodeSearchResult>> SearchMedicalCodesAsync(string q, int limit = 25, CancellationToken ct = default)
+        {
+            return await _repository.SearchMedicalCodesAsync(q, limit, ct);
+        }
+        public async Task<IReadOnlyList<MemberSearchResult>> SearchMembersAsync(string q, int limit = 25, CancellationToken ct = default)
+        {
+            return await _repository.SearchMembersAsync(q, limit, ct);
+        }
     }
+
 }

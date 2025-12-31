@@ -13,5 +13,9 @@ namespace CareNirvana.Service.Application.Interfaces
         Task<codesets?> GetByIdAsync(string id, string type);
         Task<codesets> InsertAsync(codesets entity);
         Task<codesets> UpdateAsync(codesets entity);
+
+        Task<IReadOnlyList<CodeSearchResult>> SearchIcdAsync(string q, int limit = 25, CancellationToken ct = default);
+        Task<IReadOnlyList<CodeSearchResult>> SearchMedicalCodesAsync(string q, int limit = 25, CancellationToken ct = default);
+        Task<IReadOnlyList<MemberSearchResult>> SearchMembersAsync(string q, int limit = 25, CancellationToken ct = default);
     }
 }

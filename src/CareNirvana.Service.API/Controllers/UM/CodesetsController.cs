@@ -48,5 +48,25 @@ namespace CareNirvana.Service.API.Controllers
             var result = await _service.UpdateAsync(entity);
             return Ok(result);
         }
+
+        [HttpGet("search/icd")]
+        public async Task<IActionResult> SearchIcd([FromQuery] string q, [FromQuery] int limit = 25, CancellationToken ct = default)
+        {
+            var result = await _service.SearchIcdAsync(q, limit, ct);
+            return Ok(result);
+        }
+        [HttpGet("search/medicalcodes")]
+        public async Task<IActionResult> SearchMedicalCodes([FromQuery] string q, [FromQuery] int limit = 25, CancellationToken ct = default)
+        {
+            var result = await _service.SearchMedicalCodesAsync(q, limit, ct);
+            return Ok(result);
+        }
+        [HttpGet("search/members")]
+        public async Task<IActionResult> SearchMembers([FromQuery] string q, [FromQuery] int limit = 25, CancellationToken ct = default)
+        {
+            var result = await _service.SearchMembersAsync(q, limit, ct);
+            return Ok(result);
+        }
+
     }
 }
