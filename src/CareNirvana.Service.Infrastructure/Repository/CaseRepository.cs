@@ -400,11 +400,6 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                   ORDER BY COALESCE(updatedon, createdon) DESC NULLS LAST
                                   LIMIT 1
                                 ),
-                                casetype_lu AS (
-                                  SELECT (x ->> 'id') AS id, (x ->> 'caseType') AS casetype_name
-                                  FROM admin
-                                  CROSS JOIN LATERAL jsonb_array_elements(admin.j -> 'casetype') x
-                                ),
                                 casestatus_lu AS (
                                   SELECT (x ->> 'id') AS id, (x ->> 'caseStatus') AS casestatus_name
                                   FROM admin
@@ -419,7 +414,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                   ch.casenumber                                  AS ""CaseNumber"",
                                   ch.memberdetailid                              AS ""MemberDetailId"",
                                   ch.casetype::text                              AS ""CaseType"",
-                                  COALESCE(ct.casetype_name, ch.casetype::text)  AS ""CaseTypeText"",
+                                  cct.casetemplatename                           AS ""CaseTypeText"",
                                   concat_ws(' ', md.firstname, md.lastname)      AS ""MemberName"",
                                   md.memberid                                    AS ""MemberId"",
                                   su.username                                    AS ""CreatedByUserName"",
@@ -447,7 +442,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                 ) cd ON TRUE
                                 JOIN memberdetails md ON md.memberdetailsid = ch.memberdetailid
                                 JOIN securityuser  su ON su.userid = ch.createdby
-                                LEFT JOIN casetype_lu    ct ON ct.id = ch.casetype::text
+                                JOIN cfgcasetemplate cct ON cct.casetemplateid = ch.casetype::int
                                 LEFT JOIN casestatus_lu  cs ON cs.id = (cd.jsondata::jsonb ->> 'Case_Status_Details_caseStatus')
                                 LEFT JOIN casepriority_lu cp ON cp.id = (cd.jsondata::jsonb ->> 'Case_Overview_casePriority')
                                 WHERE ch.memberdetailid = @memberId

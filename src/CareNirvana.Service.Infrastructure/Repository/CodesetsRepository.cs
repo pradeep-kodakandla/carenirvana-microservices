@@ -385,6 +385,149 @@ namespace CareNirvana.Service.Infrastructure.Repository
             return results;
         }
 
+        public async Task<IReadOnlyList<MedicationSearchResult>> SearchMedicationsAsync(
+            string q,
+            int limit = 25,
+            CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 2)
+                return Array.Empty<MedicationSearchResult>();
+
+            q = q.Trim();
+
+            await using var conn = GetConnection();
+            await conn.OpenAsync(ct);
+
+            const string sql = @"
+                select
+                    drugname as drugName,
+                    ndc as ndc
+                from cfgmedicationcodesmaster
+                where
+                    ndc::text ILIKE @starts
+                 or drugname ILIKE @contains
+                order by
+                    case when ndc::text ILIKE @starts then 0 else 1 end,
+                    case when drugname ILIKE @starts then 0 else 1 end,
+                    drugname
+                limit @limit;";
+
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("starts", $"{q}%");
+            cmd.Parameters.AddWithValue("contains", $"%{q}%");
+            cmd.Parameters.AddWithValue("limit", limit);
+
+            var results = new List<MedicationSearchResult>(limit);
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+
+            while (await reader.ReadAsync(ct))
+            {
+                results.Add(new MedicationSearchResult
+                {
+                    drugName = reader["drugName"]?.ToString(),
+                    ndc = reader["ndc"]?.ToString()
+                });
+            }
+
+            return results;
+        }
+
+        public async Task<IReadOnlyList<StaffSearchResult>> SearchStaffAsync(
+            string q,
+            int limit = 25,
+            CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 2)
+                return Array.Empty<StaffSearchResult>();
+
+            q = q.Trim();
+
+            await using var conn = GetConnection();
+            await conn.OpenAsync(ct);
+
+            const string sql = @"
+                select
+                    userdetailid,
+                    username
+                from securityuser
+                where
+                    username ILIKE @starts
+                 or username ILIKE @contains
+                order by
+                    case when username ILIKE @starts then 0 else 1 end,
+                    username
+                limit @limit;";
+
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("starts", $"{q}%");
+            cmd.Parameters.AddWithValue("contains", $"%{q}%");
+            cmd.Parameters.AddWithValue("limit", limit);
+
+            var results = new List<StaffSearchResult>(limit);
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+
+            while (await reader.ReadAsync(ct))
+            {
+                results.Add(new StaffSearchResult
+                {
+                    userdetailid = Convert.ToInt32(reader["userdetailid"]),
+                    username = reader["username"]?.ToString()
+                });
+            }
+
+            return results;
+        }
+
+        public async Task<IReadOnlyList<ProviderSearchResult>> SearchProvidersAsync(
+            string q,
+            int limit = 25,
+            CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 2)
+                return Array.Empty<ProviderSearchResult>();
+
+            q = q.Trim();
+
+            await using var conn = GetConnection();
+            await conn.OpenAsync(ct);
+
+            const string sql = @"
+                select
+                    providerid as providerId,   -- <-- change if your PK name differs
+                    firstname as firstName,
+                    lastname as lastName
+                from provider
+                where
+                    firstname ILIKE @contains
+                 or lastname ILIKE @contains
+                 or (coalesce(lastname,'') || ', ' || coalesce(firstname,'')) ILIKE @contains
+                order by
+                    case when lastname ILIKE @starts then 0 else 1 end,
+                    lastname,
+                    firstname
+                limit @limit;";
+
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("starts", $"{q}%");
+            cmd.Parameters.AddWithValue("contains", $"%{q}%");
+            cmd.Parameters.AddWithValue("limit", limit);
+
+            var results = new List<ProviderSearchResult>(limit);
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+
+            while (await reader.ReadAsync(ct))
+            {
+                results.Add(new ProviderSearchResult
+                {
+                    providerId = Convert.ToInt32(reader["providerId"]),
+                    firstName = reader["firstName"]?.ToString(),
+                    lastName = reader["lastName"]?.ToString()
+                });
+            }
+
+            return results;
+        }
+
 
     }
 }

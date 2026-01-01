@@ -41,4 +41,22 @@ namespace CareNirvana.Service.Domain.Model
         public string? gender { get; set; }
     }
 
+    public sealed class MedicationSearchResult
+    {
+        public string? drugName { get; set; }
+        public string? ndc { get; set; }
+    }
+    public sealed class StaffSearchResult
+    {
+        public int userdetailid { get; set; }
+        public string? username { get; set; }
+    }
+    public sealed class ProviderSearchResult
+    {
+        public int providerId { get; set; }
+        public string? firstName { get; set; }
+        public string? lastName { get; set; }
+    }
+
+
 }
