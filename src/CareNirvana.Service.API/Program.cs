@@ -71,6 +71,8 @@ builder.Services.AddScoped<IWorkGroup, WorkGroupRepository>();
 builder.Services.AddScoped<IMessageRepository, MessageRepository>();
 builder.Services.AddScoped<IMemberActivity, MemberActivityRepository>();
 builder.Services.AddScoped<ICaseRepository, CaseRepository>();
+builder.Services.AddScoped<ICaseNotesRepository, CaseNotesRepository>();
+builder.Services.AddScoped<ICaseDocumentsRepository, CaseDocumentsRepository>();
 
 var allowedOrigins = new[] {
     "http://localhost:4200",

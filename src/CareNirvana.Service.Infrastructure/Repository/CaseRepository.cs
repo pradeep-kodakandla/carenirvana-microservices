@@ -4,6 +4,8 @@ using Dapper;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using System.Data;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace CareNirvana.Service.Infrastructure.Repository
 {
@@ -331,8 +333,6 @@ namespace CareNirvana.Service.Infrastructure.Repository
         /// Update only casedetail
         public async Task UpdateCaseDetailAsync(UpdateCaseDetailRequest req, long userId)
         {
-            Console.WriteLine($"Updating CaseDetailId={req.CaseDetailId} by UserId={userId}");
-            Console.WriteLine($"New JsonData: {req.JsonData}");
             const string sql = @"
                 update casedetail
                 set jsondata    = @jsonData::jsonb,
@@ -455,6 +455,515 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
             //var rows = await conn.QueryAsync<AgCaseRow>(cmd);
             return rows.AsList();
+        }
+    }
+
+    // ICaseNotesRepository methods would go here************/
+    public class CaseNotesRepository : ICaseNotesRepository
+    {
+        private static readonly JsonSerializerOptions JsonOpts = new()
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
+        private readonly string _connStr;
+
+        public CaseNotesRepository(IConfiguration configuration)
+        {
+            _connStr = configuration.GetConnectionString("DefaultConnection");
+        }
+
+        private NpgsqlConnection CreateConn() => new NpgsqlConnection(_connStr);
+
+
+        public async Task<CaseNotesTemplateResponse?> GetCaseNotesTemplateAsync(int caseTemplateId, CancellationToken ct = default)
+        {
+            const string sql = @"
+                SELECT jsonb_path_query_first(
+                         ct.jsoncontent::jsonb,
+                         '$.** ? (@.sectionName == ""Case Notes"")'
+                       ) AS section
+                FROM cfgcasetemplate ct
+                WHERE ct.casetemplateid = @caseTemplateId;";
+
+            await using var conn = CreateConn();
+
+            var sectionJson = await conn.ExecuteScalarAsync<string>(
+                new CommandDefinition(sql, new { caseTemplateId }, cancellationToken: ct)
+            );
+
+            if (string.IsNullOrWhiteSpace(sectionJson))
+                return null;
+
+            // Parse to JsonElement so you can send it straight to UI or map it later
+            using var doc = JsonDocument.Parse(sectionJson);
+
+            return new CaseNotesTemplateResponse
+            {
+                CaseTemplateId = caseTemplateId,
+                SectionName = "Case Notes",
+                Section = doc.RootElement.Clone()
+            };
+        }
+
+        public async Task<IReadOnlyList<CaseNoteDto>> GetNotesAsync(int caseHeaderId, int levelId, CancellationToken ct = default)
+        {
+            const string sql = @"
+                        SELECT COALESCE(
+                          (
+                            SELECT jsonb_agg(n ORDER BY (n->>'createdOn')::timestamptz DESC)
+                            FROM jsonb_array_elements(COALESCE(cd.jsondata->'Case_Notes_caseNotesGrid','[]'::jsonb)) n
+                            WHERE n->>'deletedBy' IS NULL
+                          ),
+                          '[]'::jsonb
+                        ) AS notes
+                        FROM casedetail cd
+                        WHERE cd.caseheaderid = @caseHeaderId
+                          AND cd.caselevelid      = @levelId
+                          ";
+
+            await using var conn = CreateConn();
+            var notesJson = await conn.ExecuteScalarAsync<string>(
+                new CommandDefinition(sql, new { caseHeaderId, levelId }, cancellationToken: ct)
+            );
+
+            var list = JsonSerializer.Deserialize<List<CaseNoteDto>>(notesJson ?? "[]", JsonOpts) ?? new List<CaseNoteDto>();
+            return list;
+        }
+
+        public async Task<Guid> InsertNoteAsync(
+             int caseHeaderId,
+             int levelId,
+             CreateCaseNoteRequest req,
+             int userId,
+             CancellationToken ct = default)
+        {
+            var noteId = Guid.NewGuid();
+            var now = DateTime.UtcNow;
+
+            var newNote = new CaseNoteDto
+            {
+                NoteId = noteId,
+                NoteText = req.NoteText ?? "",
+                NoteLevel = req.NoteLevel,
+                NoteType = req.NoteType,
+                CaseAlertNote = req.CaseAlertNote,
+                CreatedBy = userId,
+                CreatedOn = now,
+                UpdatedBy = null,
+                UpdatedOn = null,
+                DeletedBy = null,
+                DeletedOn = null
+            };
+
+            var newNoteJson = JsonSerializer.Serialize(newNote, JsonOpts);
+
+            const string sql = @"
+                UPDATE casedetail
+                SET jsondata =
+                  jsonb_set(
+                    COALESCE(jsondata, '{}'::jsonb),
+                    '{Case_Notes_caseNotesGrid}',
+                    COALESCE(jsondata->'Case_Notes_caseNotesGrid','[]'::jsonb) || jsonb_build_array(@newNote::jsonb),
+                    true
+                  )
+                WHERE caseheaderid = @caseHeaderId
+                  AND caselevelid  = @levelId;
+                ";
+
+            await using var conn = CreateConn();
+
+            // Optional but recommended for concurrent inserts
+            await LockCaseDetailRow(conn, caseHeaderId, levelId, ct);
+
+            var p = new DynamicParameters();
+            p.Add("caseHeaderId", caseHeaderId);
+            p.Add("levelId", levelId);
+            p.Add("newNote", newNoteJson, DbType.String);
+
+            var rows = await conn.ExecuteAsync(new CommandDefinition(sql, p, cancellationToken: ct));
+
+            if (rows == 0)
+                throw new InvalidOperationException($"casedetail row not found for caseHeaderId={caseHeaderId}, levelId={levelId}");
+
+            return noteId;
+        }
+
+        public async Task<bool> UpdateNoteAsync(int caseHeaderId, int levelId, Guid noteId, UpdateCaseNoteRequest req, int userId, CancellationToken ct = default)
+        {
+            // Build patch JSON containing ONLY provided fields
+            var patch = new Dictionary<string, object?>();
+
+            if (req.NoteText is not null) patch["noteText"] = req.NoteText;
+            if (req.NoteLevel.HasValue) patch["noteLevel"] = req.NoteLevel.Value;
+            if (req.NoteType.HasValue) patch["noteType"] = req.NoteType.Value;
+            if (req.CaseAlertNote.HasValue) patch["caseAlertNote"] = req.CaseAlertNote.Value;
+
+            // If nothing to update, return false
+            if (patch.Count == 0) return false;
+
+            var patchJson = JsonSerializer.Serialize(patch, JsonOpts);
+
+            const string sql = @"
+                    UPDATE casedetail cd
+                        SET jsondata = jsonb_set(
+                          COALESCE(cd.jsondata, '{}'::jsonb),
+                          '{Case_Notes_caseNotesGrid}',
+                          (
+                            SELECT COALESCE(
+                              jsonb_agg(
+                                CASE
+                                  WHEN n->>'noteId' = @noteId
+                                    THEN (
+                                      n
+                                      || COALESCE(@patch::jsonb, '{}'::jsonb)
+                                      || jsonb_build_object(
+                                           'updatedOn', to_jsonb(NOW()),
+                                           'updatedBy', to_jsonb(@userId)
+                                         )
+                                    )
+                                  ELSE n
+                                END
+                              ),
+                              '[]'::jsonb
+                            )
+                            FROM jsonb_array_elements(COALESCE(cd.jsondata->'Case_Notes_caseNotesGrid','[]'::jsonb)) n
+                          ),
+                          true
+                        )
+                        WHERE cd.caseheaderid = @caseHeaderId
+                          AND cd.caselevelid  = @levelId;";
+
+            await using var conn = CreateConn();
+
+            await LockCaseDetailRow(conn, caseHeaderId, levelId, ct);
+
+
+            var rows = await conn.ExecuteAsync(new CommandDefinition(sql, new
+            {
+                caseHeaderId,
+                levelId,
+                noteId = noteId.ToString(),
+                patch = patchJson,
+                userId
+            }, cancellationToken: ct));
+
+            // rows will be 1 if the casedetail row updated; doesn’t guarantee noteId existed.
+            // If you need strict "note must exist" semantics, we can add a noteId existence check.
+            return rows > 0;
+        }
+
+        public async Task<bool> SoftDeleteNoteAsync(int caseHeaderId, int levelId, Guid noteId, int userId, CancellationToken ct = default)
+        {
+            const string sql = @"
+                    UPDATE casedetail cd
+                        SET jsondata = jsonb_set(
+                          COALESCE(cd.jsondata, '{}'::jsonb),
+                          '{Case_Notes_caseNotesGrid}',
+                          (
+                            SELECT COALESCE(
+                              jsonb_agg(
+                                CASE
+                                  WHEN n->>'noteId' = @noteId::text
+                                    THEN n || jsonb_build_object(
+                                              'deletedBy', to_jsonb(@userId),
+                                              'deletedOn', to_jsonb(NOW())
+                                            )
+                                  ELSE n
+                                END
+                              ),
+                              '[]'::jsonb
+                            )
+                            FROM jsonb_array_elements(COALESCE(cd.jsondata->'Case_Notes_caseNotesGrid','[]'::jsonb)) n
+                          ),
+                          true
+                        )
+                        WHERE cd.caseheaderid = @caseHeaderId
+                          AND cd.caselevelid  = @levelId;
+                        ";
+
+            await using var conn = CreateConn();
+
+            await LockCaseDetailRow(conn, caseHeaderId, levelId, ct);
+
+            var rows = await conn.ExecuteAsync(new CommandDefinition(sql, new
+            {
+                caseHeaderId,
+                levelId,
+                noteId = noteId.ToString(),
+                userId
+            }, cancellationToken: ct));
+
+            return rows > 0;
+        }
+
+        /// <summary>
+        /// Row lock to avoid lost updates when multiple users add/update notes simultaneously.
+        /// This is optional but strongly recommended.
+        /// </summary>
+        private static async Task LockCaseDetailRow(NpgsqlConnection conn, int caseHeaderId, int levelId, CancellationToken ct)
+        {
+            // Ensure connection open
+            if (conn.State != ConnectionState.Open)
+                await conn.OpenAsync(ct);
+
+            const string lockSql = @"
+                    SELECT 1
+                    FROM casedetail
+                    WHERE caseheaderid = @caseHeaderId
+                        AND caselevelid      = @levelId
+                    FOR UPDATE;";
+
+            // If row doesn't exist, FOR UPDATE returns 0 rows and that's okay (upsert will insert).
+            await conn.ExecuteAsync(new CommandDefinition(lockSql, new { caseHeaderId, levelId }, cancellationToken: ct));
+        }
+    }
+
+    ///************ ICaseDocumentRepository methods end here */
+    public class CaseDocumentsRepository : ICaseDocumentsRepository
+    {
+        private readonly string _connStr;
+
+        private const string DocsKey = "Case_Documents_caseDocumentsGrid";
+
+        private static readonly JsonSerializerOptions JsonOpts = new()
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+        };
+
+        public CaseDocumentsRepository(IConfiguration configuration)
+        {
+            _connStr = configuration.GetConnectionString("DefaultConnection");
+        }
+
+        private NpgsqlConnection CreateConn() => new NpgsqlConnection(_connStr);
+
+        public async Task<CaseDocumentsTemplateResponse?> GetCaseDocumentsTemplateAsync(int caseTemplateId, CancellationToken ct = default)
+        {
+            const string sql = @"
+                SELECT jsonb_path_query_first(
+                         ct.jsoncontent::jsonb,
+                         '$.** ? (@.sectionName == ""Case Documents"")'
+                       ) AS section
+                FROM cfgcasetemplate ct
+                WHERE ct.casetemplateid = @caseTemplateId;";
+
+            await using var conn = CreateConn();
+            var sectionJson = await conn.ExecuteScalarAsync<string>(
+                new CommandDefinition(sql, new { caseTemplateId }, cancellationToken: ct)
+            );
+
+            if (string.IsNullOrWhiteSpace(sectionJson))
+                return null;
+
+            using var doc = JsonDocument.Parse(sectionJson);
+
+            return new CaseDocumentsTemplateResponse
+            {
+                CaseTemplateId = caseTemplateId,
+                SectionName = "Case Documents",
+                Section = doc.RootElement.Clone()
+            };
+        }
+
+        public async Task<IReadOnlyList<CaseDocumentDto>> GetDocumentsAsync(int caseHeaderId, int levelId, CancellationToken ct = default)
+        {
+            var sql = $@"
+                SELECT COALESCE(
+                  (
+                    SELECT jsonb_agg(d ORDER BY (d->>'createdOn')::timestamptz DESC)
+                    FROM jsonb_array_elements(COALESCE(cd.jsondata->'{DocsKey}','[]'::jsonb)) d
+                    WHERE d->>'deletedBy' IS NULL
+                  ),
+                  '[]'::jsonb
+                ) AS documents
+                FROM casedetail cd
+                WHERE cd.caseheaderid = @caseHeaderId
+                  AND cd.caselevelid  = @levelId
+                  AND cd.deletedon IS NULL;";
+
+            await using var conn = CreateConn();
+
+            var docsJson = await conn.ExecuteScalarAsync<string>(
+                new CommandDefinition(sql, new { caseHeaderId, levelId }, cancellationToken: ct)
+            );
+
+            return JsonSerializer.Deserialize<List<CaseDocumentDto>>(docsJson ?? "[]", JsonOpts)
+                   ?? new List<CaseDocumentDto>();
+        }
+
+        public async Task<Guid> InsertDocumentAsync(int caseHeaderId, int levelId, CreateCaseDocumentRequest req, int userId, CancellationToken ct = default)
+        {
+            var documentId = Guid.NewGuid();
+            var now = DateTime.UtcNow;
+
+            var newDoc = new CaseDocumentDto
+            {
+                DocumentId = documentId,
+                DocumentType = req.DocumentType,
+                DocumentLevel = req.DocumentLevel,
+                DocumentDescription = req.DocumentDescription ?? "",
+                FileNames = req.FileNames ?? new List<string>(),
+
+                CreatedBy = userId,
+                CreatedOn = now,
+                UpdatedBy = null,
+                UpdatedOn = null,
+                DeletedBy = null,
+                DeletedOn = null
+            };
+
+            var newDocJson = JsonSerializer.Serialize(newDoc, JsonOpts);
+
+            var sql = $@"
+                UPDATE casedetail cd
+                SET jsondata =
+                  jsonb_set(
+                    COALESCE(cd.jsondata,'{{}}'::jsonb),
+                    '{{{DocsKey}}}',
+                    COALESCE(cd.jsondata->'{DocsKey}','[]'::jsonb) || jsonb_build_array(@doc::jsonb),
+                    true
+                  ),
+                  updatedon = NOW(),
+                  updatedby = @userId
+                WHERE cd.caseheaderid = @caseHeaderId
+                  AND cd.caselevelid  = @levelId
+                  AND cd.deletedon IS NULL;";
+
+            await using var conn = CreateConn();
+
+            // recommended: lock row for concurrent writers
+            var exists = await LockCaseDetailRow(conn, caseHeaderId, levelId, ct);
+            if (!exists) throw new InvalidOperationException($"casedetail not found for caseHeaderId={caseHeaderId}, levelId={levelId}");
+
+            var rows = await conn.ExecuteAsync(new CommandDefinition(sql, new
+            {
+                caseHeaderId,
+                levelId,
+                doc = newDocJson,
+                userId
+            }, cancellationToken: ct));
+
+            if (rows == 0) throw new InvalidOperationException("No rows updated while inserting document.");
+
+            return documentId;
+        }
+
+        public async Task<bool> UpdateDocumentAsync(int caseHeaderId, int levelId, Guid documentId, UpdateCaseDocumentRequest req, int userId, CancellationToken ct = default)
+        {
+            // build a camelCase patch JSON (matches stored JSON)
+            var patch = new Dictionary<string, object?>();
+
+            if (req.DocumentType.HasValue) patch["documentType"] = req.DocumentType.Value;
+            if (req.DocumentLevel.HasValue) patch["documentLevel"] = req.DocumentLevel.Value;
+            if (req.DocumentDescription != null) patch["documentDescription"] = req.DocumentDescription;
+            if (req.FileNames != null) patch["fileNames"] = req.FileNames;
+
+            if (patch.Count == 0) return false;
+
+            var patchJson = JsonSerializer.Serialize(patch, JsonOpts);
+
+            var sql = $@"
+                UPDATE casedetail cd
+                SET jsondata = jsonb_set(
+                  COALESCE(cd.jsondata, '{{}}'::jsonb),
+                  '{{{DocsKey}}}',
+                  (
+                    SELECT COALESCE(
+                      jsonb_agg(
+                        CASE
+                          WHEN d->>'documentId' = @documentId::text THEN
+                            (d || @patch::jsonb || jsonb_build_object('updatedOn', to_jsonb(NOW()), 'updatedBy', to_jsonb(@userId)))
+                          ELSE d
+                        END
+                      ),
+                      '[]'::jsonb
+                    )
+                    FROM jsonb_array_elements(COALESCE(cd.jsondata->'{DocsKey}','[]'::jsonb)) d
+                  ),
+                  true
+                ),
+                updatedon = NOW(),
+                updatedby = @userId
+                WHERE cd.caseheaderid = @caseHeaderId
+                  AND cd.caselevelid  = @levelId
+                  AND cd.deletedon IS NULL;";
+
+            await using var conn = CreateConn();
+            var exists = await LockCaseDetailRow(conn, caseHeaderId, levelId, ct);
+            if (!exists) return false;
+
+            var rows = await conn.ExecuteAsync(new CommandDefinition(sql, new
+            {
+                caseHeaderId,
+                levelId,
+                documentId,
+                patch = patchJson,
+                userId
+            }, cancellationToken: ct));
+
+            return rows > 0;
+        }
+
+        public async Task<bool> SoftDeleteDocumentAsync(int caseHeaderId, int levelId, Guid documentId, int userId, CancellationToken ct = default)
+        {
+            var sql = $@"
+                UPDATE casedetail cd
+                SET jsondata = jsonb_set(
+                  COALESCE(cd.jsondata, '{{}}'::jsonb),
+                  '{{{DocsKey}}}',
+                  (
+                    SELECT COALESCE(
+                      jsonb_agg(
+                        CASE
+                          WHEN d->>'documentId' = @documentId::text THEN
+                            (d || jsonb_build_object('deletedBy', to_jsonb(@userId), 'deletedOn', to_jsonb(NOW())))
+                          ELSE d
+                        END
+                      ),
+                      '[]'::jsonb
+                    )
+                    FROM jsonb_array_elements(COALESCE(cd.jsondata->'{DocsKey}','[]'::jsonb)) d
+                  ),
+                  true
+                ),
+                updatedon = NOW(),
+                updatedby = @userId
+                WHERE cd.caseheaderid = @caseHeaderId
+                  AND cd.caselevelid  = @levelId
+                  AND cd.deletedon IS NULL;";
+
+            await using var conn = CreateConn();
+            var exists = await LockCaseDetailRow(conn, caseHeaderId, levelId, ct);
+            if (!exists) return false;
+
+            var rows = await conn.ExecuteAsync(new CommandDefinition(sql, new
+            {
+                caseHeaderId,
+                levelId,
+                documentId,
+                userId
+            }, cancellationToken: ct));
+
+            return rows > 0;
+        }
+
+        private static async Task<bool> LockCaseDetailRow(NpgsqlConnection conn, int caseHeaderId, int levelId, CancellationToken ct)
+        {
+            const string lockSql = @"
+                SELECT 1
+                FROM casedetail
+                WHERE caseheaderid = @caseHeaderId
+                  AND caselevelid  = @levelId
+                  AND deletedon IS NULL
+                FOR UPDATE;";
+
+            var found = await conn.ExecuteScalarAsync<int?>(
+                new CommandDefinition(lockSql, new { caseHeaderId, levelId }, cancellationToken: ct)
+            );
+
+            return found.HasValue;
         }
     }
 }

@@ -17,5 +17,28 @@ namespace CareNirvana.Service.Application.Interfaces
         Task<IReadOnlyList<AgCaseRow>> GetAgCasesByMemberAsync(int memberDetailId, CancellationToken ct = default);
     }
 
+    public interface ICaseNotesRepository
+    {
+        Task<CaseNotesTemplateResponse?> GetCaseNotesTemplateAsync(int caseTemplateId, CancellationToken ct = default);
+        Task<IReadOnlyList<CaseNoteDto>> GetNotesAsync(int caseHeaderId, int levelId, CancellationToken ct = default);
+        Task<Guid> InsertNoteAsync(int caseHeaderId, int levelId, CreateCaseNoteRequest req, int userId, CancellationToken ct = default);
+        Task<bool> UpdateNoteAsync(int caseHeaderId, int levelId, Guid noteId, UpdateCaseNoteRequest req, int userId, CancellationToken ct = default);
+        Task<bool> SoftDeleteNoteAsync(int caseHeaderId, int levelId, Guid noteId, int userId, CancellationToken ct = default);
+    }
+
+    public interface ICaseDocumentsRepository
+    {
+        Task<CaseDocumentsTemplateResponse?> GetCaseDocumentsTemplateAsync(int caseTemplateId, CancellationToken ct = default);
+
+        Task<IReadOnlyList<CaseDocumentDto>> GetDocumentsAsync(int caseHeaderId, int levelId, CancellationToken ct = default);
+
+        Task<Guid> InsertDocumentAsync(int caseHeaderId, int levelId, CreateCaseDocumentRequest req, int userId, CancellationToken ct = default);
+
+        Task<bool> UpdateDocumentAsync(int caseHeaderId, int levelId, Guid documentId, UpdateCaseDocumentRequest req, int userId, CancellationToken ct = default);
+
+        Task<bool> SoftDeleteDocumentAsync(int caseHeaderId, int levelId, Guid documentId, int userId, CancellationToken ct = default);
+    }
+
+
 
 }

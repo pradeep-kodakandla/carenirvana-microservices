@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace CareNirvana.Service.Domain.Model
@@ -96,5 +97,115 @@ namespace CareNirvana.Service.Domain.Model
         public long CaseDetailId { get; set; }
         public string CaseLevelNumber { get; set; } = "";
     }
+
+    public sealed class CaseNoteDto
+    {
+        public Guid NoteId { get; set; }
+
+        public string NoteText { get; set; } = "";
+
+        public int NoteLevel { get; set; }           // int
+        public int NoteType { get; set; }            // int
+        public bool CaseAlertNote { get; set; }
+
+        public int CreatedBy { get; set; }
+        public DateTime CreatedOn { get; set; }
+
+        public int? UpdatedBy { get; set; }
+        public DateTime? UpdatedOn { get; set; }
+
+        public int? DeletedBy { get; set; }
+        public DateTime? DeletedOn { get; set; }
+    }
+
+    public sealed class CreateCaseNoteRequest
+    {
+        public string NoteText { get; set; } = "";
+        public int NoteLevel { get; set; }           // int
+        public int NoteType { get; set; }            // int
+        public bool CaseAlertNote { get; set; }
+    }
+
+    public sealed class UpdateCaseNoteRequest
+    {
+        // Patch-style: only update what is non-null
+        public string? NoteText { get; set; }
+        public int? NoteLevel { get; set; }          // int?
+        public int? NoteType { get; set; }           // int?
+        public bool? CaseAlertNote { get; set; }     // bool?
+    }
+
+    public sealed class CaseNotesResponse
+    {
+        public int CaseHeaderId { get; set; }
+        public int LevelId { get; set; }
+        public List<CaseNoteDto> Notes { get; set; } = new();
+    }
+
+    public sealed class CaseNotesTemplateResponse
+    {
+        public int CaseTemplateId { get; set; }
+        public string SectionName { get; set; } = "Case Notes";
+
+        // Raw JSON for the section (you can deserialize later into your TemplateSection model)
+        public JsonElement Section { get; set; }
+    }
+
+
+    public sealed class CaseDocumentsTemplateResponse
+    {
+        public int CaseTemplateId { get; set; }
+        public string SectionName { get; set; } = "Case Documents";
+        public System.Text.Json.JsonElement Section { get; set; }
+    }
+
+    public sealed class CaseDocumentsResponse
+    {
+        public int CaseHeaderId { get; set; }
+        public int LevelId { get; set; }
+        public List<CaseDocumentDto> Documents { get; set; } = new();
+    }
+
+    public sealed class CaseDocumentDto
+    {
+        public Guid DocumentId { get; set; }
+        public int DocumentType { get; set; }      // from master later
+        public int DocumentLevel { get; set; }     // from master later
+        public string DocumentDescription { get; set; } = "";
+
+        public List<string> FileNames { get; set; } = new();
+
+        public int CreatedBy { get; set; }
+        public DateTime CreatedOn { get; set; }
+        public int? UpdatedBy { get; set; }
+        public DateTime? UpdatedOn { get; set; }
+        public int? DeletedBy { get; set; }
+        public DateTime? DeletedOn { get; set; }
+    }
+
+    public sealed class CaseDocumentFileDto
+    {
+        public Guid FileId { get; set; }
+        public string FileName { get; set; } = "";
+        public string ContentType { get; set; } = "";
+        public long Size { get; set; }
+    }
+
+    public sealed class CreateCaseDocumentRequest
+    {
+        public int DocumentType { get; set; }
+        public int DocumentLevel { get; set; }
+        public string? DocumentDescription { get; set; }
+        public List<string>? FileNames { get; set; }
+    }
+
+    public sealed class UpdateCaseDocumentRequest
+    {
+        public int? DocumentType { get; set; }
+        public int? DocumentLevel { get; set; }
+        public string? DocumentDescription { get; set; }
+        public List<string>? FileNames { get; set; }
+    }
+
 }
 
