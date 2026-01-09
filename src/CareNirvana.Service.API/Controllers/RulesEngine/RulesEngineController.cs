@@ -98,11 +98,46 @@ namespace CareNirvana.Service.Api.Controllers
             return NoContent();
         }
 
+        // 1) check if rule exists for table
+        [HttpGet("decisiontables/{id}/rule")]
+        public async Task<IActionResult> GetRuleForDecisionTable(string id)
+        {
+            var rule = await _repo.GetRealtimeRuleByDecisionTableIdAsync(id);
+            if (rule == null) return NotFound();
+            return Ok(new { ruleId = rule.Id, name = rule.Name, ruleGroupId = rule.RuleGroupId, ruleType = rule.RuleType });
+        }
+
+        // 2) update rule json from decision table (called after saving table)
+        [HttpPut("decisiontables/{id}/rule/{ruleId:long}")]
+        public async Task<IActionResult> UpdateRuleForDecisionTable(string id, long ruleId, [FromBody] object ruleJson)
+        {
+            var json = System.Text.Json.JsonSerializer.Serialize(ruleJson);
+            await _repo.UpdateRuleJsonAsync(ruleId, json);
+            return Ok();
+        }
+
+
         [HttpDelete("decisiontables/{id}")]
         public async Task<IActionResult> DeleteDecisionTable(string id)
         {
             await _repo.SoftDeleteDecisionTableAsync(id);
             return NoContent();
+        }
+
+
+        [HttpGet("datafields")]
+        public async Task<IActionResult> GetRuleDataFields([FromQuery] long? moduleId = null)
+        {
+            var rows = await _repo.GetRuleDataFieldsAsync(moduleId);
+            return Ok(rows);
+        }
+
+        [HttpGet("datafields/{id:long}")]
+        public async Task<IActionResult> GetRuleDataFieldJson(long id)
+        {
+            var json = await _repo.GetRuleDataFieldJsonAsync(id);
+            if (json == null) return NotFound();
+            return Content(json, "application/json");
         }
 
 

@@ -10,28 +10,50 @@ namespace CareNirvana.Service.Domain.Model
     {
         public long Id { get; set; }
         public string Name { get; set; } = "";
-        public string ScheduleType { get; set; } = ""; // DailyOnce, DailyHourly...
         public string Description { get; set; } = "";
-        public string Purpose { get; set; } = "";
+        public bool ActiveFlag { get; set; } = true;
+
+        public DateTimeOffset CreatedOn { get; set; }
+        public long? CreatedBy { get; set; }
+
+        public DateTimeOffset? UpdatedOn { get; set; }
+        public long? UpdatedBy { get; set; }
+
+        public DateTimeOffset? DeletedOn { get; set; }
+        public long? DeletedBy { get; set; }
     }
+
 
     public sealed class RuleDto
     {
         public long Id { get; set; }
         public long RuleGroupId { get; set; }
+
         public string Name { get; set; } = "";
         public string RuleType { get; set; } = "";     // REALTIME, BATCH...
         public string Description { get; set; } = "";
-        public string? RuleJson { get; set; }          // optional JSON text
+
+        public string? RuleJson { get; set; }          // jsonb -> text
+        public bool ActiveFlag { get; set; } = true;
+
+        public DateTimeOffset CreatedOn { get; set; }
+        public long? CreatedBy { get; set; }
+
+        public DateTimeOffset? UpdatedOn { get; set; }
+        public long? UpdatedBy { get; set; }
+
+        public DateTimeOffset? DeletedOn { get; set; }
+        public long? DeletedBy { get; set; }
     }
+
 
     public sealed class UpsertRuleGroupRequest
     {
         public string Name { get; set; } = "";
-        public string ScheduleType { get; set; } = "";
         public string Description { get; set; } = "";
-        public string Purpose { get; set; } = "";
+        public bool ActiveFlag { get; set; } = true;
     }
+
 
     public sealed class UpsertRuleRequest
     {
@@ -40,7 +62,9 @@ namespace CareNirvana.Service.Domain.Model
         public string RuleType { get; set; } = "";
         public string Description { get; set; } = "";
         public string? RuleJson { get; set; }
+        public bool ActiveFlag { get; set; } = true;
     }
+
 
     public sealed class DecisionTableParamDto
     {
@@ -55,53 +79,54 @@ namespace CareNirvana.Service.Domain.Model
         public bool IsEnabled { get; set; } = true;
     }
 
-    public sealed class DecisionTableTemplateDto
-    {
-        public string Id { get; set; } = "";
-        public string Name { get; set; } = "";
-        public string Description { get; set; } = "";
-        public string HitPolicy { get; set; } = "FIRST";
-        public int Version { get; set; } = 1;
-        public string Status { get; set; } = "DRAFT";
-        public string UpdatedOn { get; set; } = ""; // ISO string
-
-        public List<DecisionTableParamDto> Inputs { get; set; } = new();
-        public List<DecisionTableParamDto> Outputs { get; set; } = new();
-
-        // template builder stores no rows, but keep it for future compatibility
-        public List<object> Rows { get; set; } = new();
-    }
-
-    public sealed class DecisionTableTemplateListDto
-    {
-        public string Id { get; set; } = "";
-        public string Name { get; set; } = "";
-        public string Status { get; set; } = "";
-        public int Version { get; set; }
-        public DateTimeOffset UpdatedOn { get; set; }
-    }
-
     public sealed class DecisionTableListDto
     {
-        public string Id { get; set; } = "";
-        public string Name { get; set; } = "";
-        public string Status { get; set; } = "";
+        public string Id { get; set; } = "";                 // uniquedecisiontableid
+        public string Name { get; set; } = "";               // ruledecisiontablename
+        public string Status { get; set; } = "";             // deploymentstatus
         public int Version { get; set; }
         public DateTimeOffset UpdatedOn { get; set; }
+        public bool ActiveFlag { get; set; } = true;
     }
+
 
     public sealed class DecisionTablePayloadDto
     {
-        public string Id { get; set; } = "";
-        public string Name { get; set; } = "";
+        public string Id { get; set; } = "";                 // uniquedecisiontableid
+        public string Name { get; set; } = "";               // ruledecisiontablename
         public string Description { get; set; } = "";
         public string HitPolicy { get; set; } = "FIRST";
         public int Version { get; set; } = 1;
-        public string Status { get; set; } = "DRAFT";
-        public string UpdatedOn { get; set; } = "";
+        public string Status { get; set; } = "DRAFT";        // deploymentstatus
+        public bool ActiveFlag { get; set; } = true;
 
-        public object? Columns { get; set; }   // store as JSON
-        public object? Rows { get; set; }      // store as JSON
+        public string UpdatedOn { get; set; } = "";          // keep as ISO string for UI consistency
+
+        // Your decision table json (full payload) is stored in decisiontablejson.
+        // Keep these if your Angular builder uses them, but you’ll store the whole thing as JSON in DB.
+        public object? Columns { get; set; }
+        public object? Rows { get; set; }
+    }
+
+    public sealed class RuleDataFieldDto
+    {
+        public long RuleDataFieldId { get; set; }
+        public long ModuleId { get; set; }
+        public string ModuleName { get; set; } = "";
+
+        // store jsonb as text for easy UI use (you can JSON.parse in Angular)
+        public string RuleDataFieldJson { get; set; } = "{}";
+
+        public bool ActiveFlag { get; set; } = true;
+
+        public DateTimeOffset CreatedOn { get; set; }
+        public long? CreatedBy { get; set; }
+
+        public DateTimeOffset? UpdatedOn { get; set; }
+        public long? UpdatedBy { get; set; }
+
+        public DateTimeOffset? DeletedOn { get; set; }
+        public long? DeletedBy { get; set; }
     }
 
 
