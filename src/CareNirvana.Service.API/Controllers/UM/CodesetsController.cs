@@ -89,5 +89,26 @@ namespace CareNirvana.Service.API.Controllers
             return Ok(result);
         }
 
+        [HttpGet("provider/{providerId}")]
+        public async Task<IActionResult> GetProviderById(int providerId, CancellationToken ct = default)
+        {
+            var result = await _service.GetProviderByIdAsync(providerId, ct);
+            return result == null ? NotFound() : Ok(result);
+        }
+
+        [HttpGet("search/claims")]
+        public async Task<IActionResult> SearchClaims([FromQuery] string q, [FromQuery] int limit = 25, CancellationToken ct = default)
+        {
+            var result = await _service.SearchClaimsAsync(q, limit, ct);
+            return Ok(result);
+        }
+
+        [HttpGet("claim/{memberClaimHeaderId}")]
+        public async Task<IActionResult> GetClaimById(long memberClaimHeaderId, CancellationToken ct = default)
+        {
+            var result = await _service.GetClaimByIdAsync(memberClaimHeaderId, ct);
+            return result == null ? NotFound() : Ok(result);
+        }
+
     }
 }

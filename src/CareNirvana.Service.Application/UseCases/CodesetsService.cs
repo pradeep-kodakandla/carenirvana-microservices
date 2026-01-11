@@ -63,6 +63,21 @@ namespace CareNirvana.Service.Application.UseCases
         {
             return await _repository.SearchProvidersAsync(q, limit, ct);
         }
+
+        public Task<ProviderDetailResult?> GetProviderByIdAsync(int providerId, CancellationToken ct = default)
+        {
+            return _repository.GetProviderByIdAsync(providerId, ct);
+        }
+
+        public Task<IReadOnlyList<ClaimSearchResult>> SearchClaimsAsync(string q, int limit = 25, CancellationToken ct = default)
+        {
+            return _repository.SearchClaimsAsync(q, limit, ct);
+        }
+        public Task<ClaimDetailResult?> GetClaimByIdAsync(long memberClaimHeaderId, CancellationToken ct = default)
+        {
+            return _repository.GetClaimByIdAsync(memberClaimHeaderId, ct);
+        }
+
     }
 
 }

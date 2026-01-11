@@ -21,5 +21,8 @@ namespace CareNirvana.Service.Application.Interfaces
         Task<IReadOnlyList<StaffSearchResult>> SearchStaffAsync(string q, int limit = 25, CancellationToken ct = default);
         Task<IReadOnlyList<ProviderSearchResult>> SearchProvidersAsync(string q, int limit = 25, CancellationToken ct = default);
 
+        Task<ProviderDetailResult?> GetProviderByIdAsync(int providerId, CancellationToken ct = default);
+        Task<IReadOnlyList<ClaimSearchResult>> SearchClaimsAsync(string q, int limit = 25, CancellationToken ct = default);
+        Task<ClaimDetailResult?> GetClaimByIdAsync(long memberClaimHeaderId, CancellationToken ct = default);
     }
 }
