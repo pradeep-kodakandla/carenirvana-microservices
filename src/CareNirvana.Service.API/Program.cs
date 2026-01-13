@@ -75,6 +75,7 @@ builder.Services.AddScoped<ICaseNotesRepository, CaseNotesRepository>();
 builder.Services.AddScoped<ICaseDocumentsRepository, CaseDocumentsRepository>();
 builder.Services.AddScoped<ICaseActivityRepository, CaseActivityRepository>();
 builder.Services.AddScoped<IRulesEngineRepository, RulesEngineRepository>();
+builder.Services.AddScoped<ICfgvalidationRepository, CfgvalidationRepository>();
 
 var allowedOrigins = new[] {
     "http://localhost:4200",
