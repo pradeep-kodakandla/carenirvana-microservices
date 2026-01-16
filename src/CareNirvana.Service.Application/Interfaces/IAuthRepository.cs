@@ -1,0 +1,31 @@
+﻿using CareNirvana.Service.Domain.Model;
+
+namespace CareNirvana.Service.Application.Interfaces
+{
+    public interface IAuthRepository
+    {
+        Task<AuthDetailRow?> GetAuthByNumberAsync(string authNumber, bool includeDeleted = false);
+        Task<AuthDetailRow?> GetAuthByIdAsync(long authDetailId, bool includeDeleted = false);
+        Task<List<AuthDetailRow>> GetAuthsByMemberAsync(int memberDetailsId, bool includeDeleted = false);
+
+        Task<long> CreateAuthAsync(CreateAuthRequest req, int userId);
+        Task UpdateAuthAsync(long authDetailId, UpdateAuthRequest req, int userId);
+        Task SoftDeleteAuthAsync(long authDetailId, int userId);
+    }
+
+    public interface IAuthNotesRepository
+    {
+        Task<IReadOnlyList<AuthNoteDto>> GetNotesAsync(long authDetailId, CancellationToken ct = default);
+        Task<Guid> InsertNoteAsync(long authDetailId, CreateAuthNoteRequest req, int userId, CancellationToken ct = default);
+        Task<bool> UpdateNoteAsync(long authDetailId, Guid noteId, UpdateAuthNoteRequest req, int userId, CancellationToken ct = default);
+        Task<bool> SoftDeleteNoteAsync(long authDetailId, Guid noteId, int userId, CancellationToken ct = default);
+    }
+
+    public interface IAuthDocumentsRepository
+    {
+        Task<IReadOnlyList<AuthDocumentDto>> GetDocumentsAsync(long authDetailId, CancellationToken ct = default);
+        Task<Guid> InsertDocumentAsync(long authDetailId, CreateAuthDocumentRequest req, int userId, CancellationToken ct = default);
+        Task<bool> UpdateDocumentAsync(long authDetailId, Guid documentId, UpdateAuthDocumentRequest req, int userId, CancellationToken ct = default);
+        Task<bool> SoftDeleteDocumentAsync(long authDetailId, Guid documentId, int userId, CancellationToken ct = default);
+    }
+}
