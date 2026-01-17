@@ -11,7 +11,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
 {
     public class AuthNotesRepository : IAuthNotesRepository
     {
-        private const string NotesKey = "Auth_Notes_authNotesGrid";
+        private const string NotesKey = "authNotes";
 
         private static readonly JsonSerializerOptions JsonOpts = new()
         {
@@ -28,153 +28,208 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
         private NpgsqlConnection CreateConn() => new NpgsqlConnection(_connStr);
 
+        public async Task<TemplateSectionResponse?> GetAuthNotesTemplateAsync(int authTemplateId, CancellationToken ct = default)
+        {
+            const string sql = @"
+                SELECT jsonb_path_query_first(
+                         ct.jsoncontent::jsonb,
+                         '$.** ? (@.sectionName == $name)',
+                         jsonb_build_object('name', to_jsonb(@sectionName))
+                       )::text AS section
+                FROM cfgauthtemplate ct
+                WHERE ct.authtemplateid = @authTemplateId;";
+
+            await using var conn = CreateConn();
+
+            var sectionJson = await conn.ExecuteScalarAsync<string>(
+                new CommandDefinition(sql,
+                    new { authTemplateId, sectionName = "Authorization Notes" },
+                    cancellationToken: ct)
+            );
+
+            if (string.IsNullOrWhiteSpace(sectionJson))
+                return null;
+
+            using var doc = JsonDocument.Parse(sectionJson);
+
+            return new TemplateSectionResponse
+            {
+                CaseTemplateId = authTemplateId, // rename property if you want (see note below)
+                SectionName = "Authorization Notes",
+                Section = doc.RootElement.Clone()
+            };
+        }
+
         public async Task<IReadOnlyList<AuthNoteDto>> GetNotesAsync(long authDetailId, CancellationToken ct = default)
         {
-            var sql = $@"
+            const string notesKey = "authNotes";
+
+            const string sql = @"
                 select coalesce(
                   (
                     select jsonb_agg(n order by (n->>'createdOn')::timestamptz desc)
-                    from jsonb_array_elements(coalesce(a.data->'{NotesKey}','[]'::jsonb)) n
+                    from jsonb_array_elements(coalesce(a.data->@notesKey, '[]'::jsonb)) n
                     where n->>'deletedBy' is null
                   ),
                   '[]'::jsonb
-                ) as notes
+                )::text as notes
                 from authdetail a
                 where a.authdetailid = @authDetailId
                   and a.deletedon is null;";
 
             await using var conn = CreateConn();
             var notesJson = await conn.ExecuteScalarAsync<string>(
-                new CommandDefinition(sql, new { authDetailId }, cancellationToken: ct));
+                new CommandDefinition(sql, new { authDetailId, notesKey }, cancellationToken: ct));
 
             return JsonSerializer.Deserialize<List<AuthNoteDto>>(notesJson ?? "[]", JsonOpts) ?? new List<AuthNoteDto>();
         }
 
+
         public async Task<Guid> InsertNoteAsync(long authDetailId, CreateAuthNoteRequest req, int userId, CancellationToken ct = default)
         {
             var noteId = Guid.NewGuid();
-            var now = DateTime.UtcNow;
 
-            var newNote = new AuthNoteDto
-            {
-                NoteId = noteId,
-                NoteText = req.NoteText ?? "",
-                NoteLevel = req.NoteLevel,
-                NoteType = req.NoteType,
-                AuthAlertNote = req.AuthAlertNote,
-                CreatedBy = userId,
-                CreatedOn = now
-            };
-
-            var newNoteJson = JsonSerializer.Serialize(newNote, JsonOpts);
-
-            var sql = $@"
-                update authdetail a
-                set data =
-                  jsonb_set(
-                    coalesce(a.data,'{{}}'::jsonb),
-                    '{{{NotesKey}}}',
-                    coalesce(a.data->'{NotesKey}','[]'::jsonb) || jsonb_build_array(@newNote::jsonb),
-                    true
+            const string sql = @"
+                  update authdetail a
+                  set data = jsonb_set(
+                      coalesce(a.data, '{}'::jsonb),
+                      '{authNotes}',
+                      coalesce(a.data->'authNotes', '[]'::jsonb) || jsonb_build_object(
+                        'noteId', @noteId::text,
+                        'noteText', coalesce(@noteText, ''),
+                        'noteType', @noteType,
+                        'noteLevel', @noteLevel,
+                        'authAlertNote', @authAlertNote,
+                        'encounteredOn', @encounteredOn,
+                        'alertEndDate', @alertEndDate,
+                        'createdBy', @userId,
+                        'createdOn', now(),
+                        'updatedBy', null,
+                        'updatedOn', null,
+                        'deletedBy', null,
+                        'deletedOn', null
+                      ),
+                      true
                   ),
                   updatedon = now(),
                   updatedby = @userId
-                where a.authdetailid = @authDetailId
-                  and a.deletedon is null;";
+                  where a.authdetailid = @authDetailId
+                    and a.deletedon is null;";
 
             await using var conn = CreateConn();
-            await LockAuthRow(conn, authDetailId, ct);
+            var rows = await conn.ExecuteAsync(new CommandDefinition(sql, new
+            {
+                authDetailId,
+                noteId,
+                noteText = req.NoteText,
+                noteType = req.NoteType,
+                noteLevel = req.NoteLevel,
+                authAlertNote = req.AuthAlertNote,
+                encounteredOn = req.EncounteredOn,
+                alertEndDate = req.AlertEndDate,
+                userId
+            }, cancellationToken: ct));
 
-            var rows = await conn.ExecuteAsync(
-                new CommandDefinition(sql, new { authDetailId, newNote = newNoteJson, userId }, cancellationToken: ct));
-
-            if (rows == 0)
-                throw new InvalidOperationException($"authdetail not found for authDetailId={authDetailId}");
+            if (rows == 0) throw new InvalidOperationException("Auth not found or deleted.");
 
             return noteId;
         }
 
         public async Task<bool> UpdateNoteAsync(long authDetailId, Guid noteId, UpdateAuthNoteRequest req, int userId, CancellationToken ct = default)
         {
-            var patch = new Dictionary<string, object?>();
-
-            if (req.NoteText is not null) patch["noteText"] = req.NoteText;
-            if (req.NoteLevel.HasValue) patch["noteLevel"] = req.NoteLevel.Value;
-            if (req.NoteType.HasValue) patch["noteType"] = req.NoteType.Value;
-            if (req.AuthAlertNote.HasValue) patch["authAlertNote"] = req.AuthAlertNote.Value;
-
-            if (patch.Count == 0) return false;
-
-            var patchJson = JsonSerializer.Serialize(patch, JsonOpts);
-
-            var sql = $@"
-                update authdetail a
-                set data = jsonb_set(
-                  coalesce(a.data,'{{}}'::jsonb),
-                  '{{{NotesKey}}}',
-                  (
-                    select coalesce(
-                      jsonb_agg(
-                        case
-                          when n->>'noteId' = @noteId::text then
-                            (n || @patch::jsonb || jsonb_build_object('updatedOn', to_jsonb(now()), 'updatedBy', to_jsonb(@userId)))
-                          else n
-                        end
-                      ),
-                      '[]'::jsonb
-                    )
-                    from jsonb_array_elements(coalesce(a.data->'{NotesKey}','[]'::jsonb)) n
+            const string sql = @"
+                  update authdetail a
+                  set data = jsonb_set(
+                      coalesce(a.data, '{}'::jsonb),
+                      '{authNotes}',
+                      coalesce((
+                        select jsonb_agg(
+                          case
+                            when n->>'noteId' = @noteId::text then
+                              (n
+                                || jsonb_build_object(
+                                  'noteText', coalesce(@noteText, n->>'noteText'),
+                                  'noteType', coalesce(to_jsonb(@noteType), n->'noteType'),
+                                  'noteLevel', coalesce(to_jsonb(@noteLevel), n->'noteLevel'),
+                                  'authAlertNote', coalesce(to_jsonb(@authAlertNote), n->'authAlertNote'),
+                                  'encounteredOn', coalesce(to_jsonb(@encounteredOn), n->'encounteredOn'),
+                                  'alertEndDate', coalesce(to_jsonb(@alertEndDate), n->'alertEndDate'),
+                                  'updatedBy', @userId,
+                                  'updatedOn', now()
+                                )
+                              )
+                            else n
+                          end
+                          order by (n->>'createdOn')::timestamptz desc
+                        )
+                        from jsonb_array_elements(coalesce(a.data->'authNotes', '[]'::jsonb)) n
+                      ), '[]'::jsonb),
+                      true
                   ),
-                  true
-                ),
-                updatedon = now(),
-                updatedby = @userId
-                where a.authdetailid = @authDetailId
-                  and a.deletedon is null;";
+                  updatedon = now(),
+                  updatedby = @userId
+                  where a.authdetailid = @authDetailId
+                    and a.deletedon is null;";
 
             await using var conn = CreateConn();
-            await LockAuthRow(conn, authDetailId, ct);
+            var rows = await conn.ExecuteAsync(new CommandDefinition(sql, new
+            {
+                authDetailId,
+                noteId,
+                noteText = req.NoteText,
+                noteType = req.NoteType,
+                noteLevel = req.NoteLevel,
+                authAlertNote = req.AuthAlertNote,
+                encounteredOn = req.EncounteredOn,
+                alertEndDate = req.AlertEndDate,
+                userId
+            }, cancellationToken: ct));
 
-            var rows = await conn.ExecuteAsync(
-                new CommandDefinition(sql, new { authDetailId, noteId, patch = patchJson, userId }, cancellationToken: ct));
-
-            return rows > 0;
+            if (rows == 0) throw new InvalidOperationException("Auth not found or deleted.");
+            else return rows > 0;
         }
 
         public async Task<bool> SoftDeleteNoteAsync(long authDetailId, Guid noteId, int userId, CancellationToken ct = default)
         {
-            var sql = $@"
-                update authdetail a
-                set data = jsonb_set(
-                  coalesce(a.data,'{{}}'::jsonb),
-                  '{{{NotesKey}}}',
-                  (
-                    select coalesce(
-                      jsonb_agg(
-                        case
-                          when n->>'noteId' = @noteId::text then
-                            (n || jsonb_build_object('deletedBy', to_jsonb(@userId), 'deletedOn', to_jsonb(now())))
-                          else n
-                        end
-                      ),
-                      '[]'::jsonb
+            const string sql = @"
+              update authdetail a
+              set data = jsonb_set(
+                  coalesce(a.data, '{}'::jsonb),
+                  '{authNotes}',
+                  coalesce((
+                    select jsonb_agg(
+                      case
+                        when n->>'noteId' = @noteId::text then
+                          (n
+                            || jsonb_build_object(
+                              'deletedBy', @userId,
+                              'deletedOn', now()
+                            )
+                          )
+                        else n
+                      end
+                      order by (n->>'createdOn')::timestamptz desc
                     )
-                    from jsonb_array_elements(coalesce(a.data->'{NotesKey}','[]'::jsonb)) n
-                  ),
+                    from jsonb_array_elements(coalesce(a.data->'authNotes', '[]'::jsonb)) n
+                  ), '[]'::jsonb),
                   true
-                ),
-                updatedon = now(),
-                updatedby = @userId
-                where a.authdetailid = @authDetailId
-                  and a.deletedon is null;";
+              ),
+              updatedon = now(),
+              updatedby = @userId
+              where a.authdetailid = @authDetailId
+                and a.deletedon is null;";
 
             await using var conn = CreateConn();
-            await LockAuthRow(conn, authDetailId, ct);
+            var rows = await conn.ExecuteAsync(new CommandDefinition(sql, new
+            {
+                authDetailId,
+                noteId,
+                userId
+            }, cancellationToken: ct));
 
-            var rows = await conn.ExecuteAsync(
-                new CommandDefinition(sql, new { authDetailId, noteId, userId }, cancellationToken: ct));
-
-            return rows > 0;
+            if (rows == 0) throw new InvalidOperationException("Auth not found or deleted.");
+            else
+                return rows > 0;
         }
 
         private static async Task LockAuthRow(NpgsqlConnection conn, long authDetailId, CancellationToken ct)

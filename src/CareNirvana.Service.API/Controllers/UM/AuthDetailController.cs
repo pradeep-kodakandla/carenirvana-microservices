@@ -190,5 +190,34 @@ namespace CareNirvana.Service.Api.Controllers
             var ok = await _docsRepo.SoftDeleteDocumentAsync(authDetailId, documentId, userId, ct);
             return ok ? NoContent() : NotFound();
         }
+
+        [HttpGet("template/{authTemplateId}/decision")]
+        public async Task<ActionResult<TemplateSectionsResponse?>> GetDecisionTemplate(
+            int authTemplateId,
+            CancellationToken ct)
+        {
+            var template = await _authRepo.GetDecisionTemplateAsync(authTemplateId, ct);
+            if (template == null) return NotFound();
+            return Ok(template);
+        }
+
+        [HttpGet("template/{authTemplateId}/notes")]
+        public async Task<ActionResult<TemplateSectionResponse?>> GetAuthNotesTemplate(
+            int authTemplateId,
+            CancellationToken ct)
+        {
+            var template = await _notesRepo.GetAuthNotesTemplateAsync(authTemplateId, ct);
+            if (template == null) return NotFound();
+            return Ok(template);
+        }
+        [HttpGet("template/{authTemplateId}/documents")]
+        public async Task<ActionResult<TemplateSectionResponse?>> GetAuthDocumentsTemplate(
+            int authTemplateId,
+            CancellationToken ct)
+        {
+            var template = await _docsRepo.GetAuthDocumentsTemplateAsync(authTemplateId, ct);
+            if (template == null) return NotFound();
+            return Ok(template);
+        }
     }
 }

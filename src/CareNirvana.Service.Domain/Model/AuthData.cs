@@ -61,69 +61,97 @@ namespace CareNirvana.Service.Domain.Model
 
     // -------- Notes (stored inside authdetail.data jsonb) --------
 
-    public class AuthNoteDto
+    public sealed class AuthNoteDto
     {
         public Guid NoteId { get; set; }
         public string NoteText { get; set; } = "";
-        public int? NoteLevel { get; set; }
-        public int? NoteType { get; set; }
-        public bool? AuthAlertNote { get; set; }
 
-        public int CreatedBy { get; set; }
+        public int? NoteType { get; set; }       // from UM: authorizationNoteType
+        public int? NoteLevel { get; set; }      // optional, if you have it
+        public bool? AuthAlertNote { get; set; } // from UM: authorizationAlertNote
+        public DateTime? EncounteredOn { get; set; }  // from UM: noteEncounteredDatetime
+        public DateTime? AlertEndDate { get; set; }   // from UM: newDate_copy_q5d60fyd5
+
+        public long CreatedBy { get; set; }
         public DateTime CreatedOn { get; set; }
-        public int? UpdatedBy { get; set; }
+        public long? UpdatedBy { get; set; }
         public DateTime? UpdatedOn { get; set; }
-        public int? DeletedBy { get; set; }
+        public long? DeletedBy { get; set; }
         public DateTime? DeletedOn { get; set; }
     }
 
-    public class CreateAuthNoteRequest
+
+    public sealed class CreateAuthNoteRequest
     {
         public string? NoteText { get; set; }
-        public int? NoteLevel { get; set; }
         public int? NoteType { get; set; }
+        public int? NoteLevel { get; set; }
         public bool? AuthAlertNote { get; set; }
+        public DateTime? EncounteredOn { get; set; }
+        public DateTime? AlertEndDate { get; set; }
     }
 
-    public class UpdateAuthNoteRequest
+
+    public sealed class UpdateAuthNoteRequest
     {
         public string? NoteText { get; set; }
-        public int? NoteLevel { get; set; }
         public int? NoteType { get; set; }
+        public int? NoteLevel { get; set; }
         public bool? AuthAlertNote { get; set; }
+        public DateTime? EncounteredOn { get; set; }
+        public DateTime? AlertEndDate { get; set; }
     }
+
 
     // -------- Documents (stored inside authdetail.data jsonb) --------
 
-    public class AuthDocumentDto
+    public sealed class AuthDocumentDto
     {
         public Guid DocumentId { get; set; }
-        public int? DocumentType { get; set; }
-        public int? DocumentLevel { get; set; }
-        public string DocumentDescription { get; set; } = "";
+
+        public int? DocumentType { get; set; }              // authorizationDocumentType
+        public string? DocumentDescription { get; set; }    // authorizationDocumentDesc
         public List<string> FileNames { get; set; } = new();
 
-        public int CreatedBy { get; set; }
+        public long CreatedBy { get; set; }
         public DateTime CreatedOn { get; set; }
-        public int? UpdatedBy { get; set; }
+
+        public long? UpdatedBy { get; set; }
         public DateTime? UpdatedOn { get; set; }
-        public int? DeletedBy { get; set; }
+
+        public long? DeletedBy { get; set; }
         public DateTime? DeletedOn { get; set; }
     }
 
-    public class CreateAuthDocumentRequest
+    public sealed class CreateAuthDocumentRequest
     {
         public int? DocumentType { get; set; }
-        public int? DocumentLevel { get; set; }
         public string? DocumentDescription { get; set; }
         public List<string>? FileNames { get; set; }
     }
 
-    public class UpdateAuthDocumentRequest
+
+    public sealed class UpdateAuthDocumentRequest
     {
         public int? DocumentType { get; set; }
-        public int? DocumentLevel { get; set; }
         public string? DocumentDescription { get; set; }
         public List<string>? FileNames { get; set; }
     }
+
+
+    public sealed class TemplateSectionsResponse
+    {
+        public int CaseTemplateId { get; set; }
+        public string GroupName { get; set; } = "";
+        public JsonElement Sections { get; set; } // JSON array
+    }
+
+    public sealed class TemplateSectionResponse
+    {
+        public int CaseTemplateId { get; set; }
+        public string SectionName { get; set; } = "";
+        public JsonElement Section { get; set; }
+    }
+
+
 }

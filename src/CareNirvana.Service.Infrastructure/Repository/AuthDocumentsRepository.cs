@@ -11,7 +11,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
 {
     public class AuthDocumentsRepository : IAuthDocumentsRepository
     {
-        private const string DocsKey = "Auth_Documents_authDocumentsGrid";
+        private const string DocsKey = "authDocuments";
 
         private static readonly JsonSerializerOptions JsonOpts = new()
         {
@@ -28,153 +28,184 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
         private NpgsqlConnection CreateConn() => new NpgsqlConnection(_connStr);
 
-        public async Task<IReadOnlyList<AuthDocumentDto>> GetDocumentsAsync(long authDetailId, CancellationToken ct = default)
+        public async Task<TemplateSectionResponse?> GetAuthDocumentsTemplateAsync(int authTemplateId, CancellationToken ct = default)
         {
-            var sql = $@"
-                select coalesce(
-                  (
-                    select jsonb_agg(d order by (d->>'createdOn')::timestamptz desc)
-                    from jsonb_array_elements(coalesce(a.data->'{DocsKey}','[]'::jsonb)) d
-                    where d->>'deletedBy' is null
-                  ),
-                  '[]'::jsonb
-                ) as documents
-                from authdetail a
-                where a.authdetailid = @authDetailId
-                  and a.deletedon is null;";
+            const string sql = @"
+                SELECT jsonb_path_query_first(
+                         ct.jsoncontent::jsonb,
+                         '$.** ? (@.sectionName == $name)',
+                         jsonb_build_object('name', to_jsonb(@sectionName))
+                       )::text AS section
+                FROM cfgauthtemplate ct
+                WHERE ct.authtemplateid = @authTemplateId;";
 
             await using var conn = CreateConn();
-            var docsJson = await conn.ExecuteScalarAsync<string>(
+
+            var sectionJson = await conn.ExecuteScalarAsync<string>(
+                new CommandDefinition(sql,
+                    new { authTemplateId, sectionName = "Authorization Documents" },
+                    cancellationToken: ct)
+            );
+
+            if (string.IsNullOrWhiteSpace(sectionJson))
+                return null;
+
+            using var doc = JsonDocument.Parse(sectionJson);
+
+            return new TemplateSectionResponse
+            {
+                CaseTemplateId = authTemplateId,
+                SectionName = "Authorization Documents",
+                Section = doc.RootElement.Clone()
+            };
+        }
+
+        public async Task<IReadOnlyList<AuthDocumentDto>> GetDocumentsAsync(long authDetailId, CancellationToken ct = default)
+        {
+            const string sql = @"
+                  select coalesce(
+                    (
+                      select jsonb_agg(d order by (d->>'createdOn')::timestamptz desc)
+                      from jsonb_array_elements(coalesce(a.data->'authDocuments','[]'::jsonb)) d
+                      where d->>'deletedBy' is null
+                    ),
+                    '[]'::jsonb
+                  )::text as documents
+                  from authdetail a
+                  where a.authdetailid = @authDetailId
+                    and a.deletedon is null;";
+
+            await using var conn = CreateConn();
+            var json = await conn.ExecuteScalarAsync<string>(
                 new CommandDefinition(sql, new { authDetailId }, cancellationToken: ct));
 
-            return JsonSerializer.Deserialize<List<AuthDocumentDto>>(docsJson ?? "[]", JsonOpts) ?? new List<AuthDocumentDto>();
+            return JsonSerializer.Deserialize<List<AuthDocumentDto>>(json ?? "[]", JsonOpts) ?? new();
         }
+
 
         public async Task<Guid> InsertDocumentAsync(long authDetailId, CreateAuthDocumentRequest req, int userId, CancellationToken ct = default)
         {
             var documentId = Guid.NewGuid();
-            var now = DateTime.UtcNow;
 
-            var newDoc = new AuthDocumentDto
-            {
-                DocumentId = documentId,
-                DocumentType = req.DocumentType,
-                DocumentLevel = req.DocumentLevel,
-                DocumentDescription = req.DocumentDescription ?? "",
-                FileNames = req.FileNames ?? new List<string>(),
-                CreatedBy = userId,
-                CreatedOn = now
-            };
-
-            var newDocJson = JsonSerializer.Serialize(newDoc, JsonOpts);
-
-            var sql = $@"
-                update authdetail a
-                set data =
-                  jsonb_set(
-                    coalesce(a.data,'{{}}'::jsonb),
-                    '{{{DocsKey}}}',
-                    coalesce(a.data->'{DocsKey}','[]'::jsonb) || jsonb_build_array(@doc::jsonb),
-                    true
+            const string sql = @"
+                  update authdetail a
+                  set data = jsonb_set(
+                      coalesce(a.data, '{}'::jsonb),
+                      '{authDocuments}',
+                      coalesce(a.data->'authDocuments', '[]'::jsonb) || jsonb_build_object(
+                        'documentId', @documentId::text,
+                        'documentType', @documentType,
+                        'documentDescription', coalesce(@documentDescription, ''),
+                        'fileNames', coalesce(to_jsonb(@fileNames::text[]), '[]'::jsonb),
+                        'createdBy', @userId,
+                        'createdOn', now(),
+                        'updatedBy', null,
+                        'updatedOn', null,
+                        'deletedBy', null,
+                        'deletedOn', null
+                      ),
+                      true
                   ),
                   updatedon = now(),
                   updatedby = @userId
-                where a.authdetailid = @authDetailId
-                  and a.deletedon is null;";
+                  where a.authdetailid = @authDetailId
+                    and a.deletedon is null;";
 
             await using var conn = CreateConn();
-            await LockAuthRow(conn, authDetailId, ct);
+            var rows = await conn.ExecuteAsync(new CommandDefinition(sql, new
+            {
+                authDetailId,
+                documentId,
+                documentType = req.DocumentType,
+                documentDescription = req.DocumentDescription,
+                fileNames = (req.FileNames ?? new List<string>()).ToArray(),
+                userId
+            }, cancellationToken: ct));
 
-            var rows = await conn.ExecuteAsync(
-                new CommandDefinition(sql, new { authDetailId, doc = newDocJson, userId }, cancellationToken: ct));
-
-            if (rows == 0)
-                throw new InvalidOperationException($"authdetail not found for authDetailId={authDetailId}");
+            if (rows == 0) throw new InvalidOperationException("Auth not found or deleted.");
 
             return documentId;
         }
 
         public async Task<bool> UpdateDocumentAsync(long authDetailId, Guid documentId, UpdateAuthDocumentRequest req, int userId, CancellationToken ct = default)
         {
-            var patch = new Dictionary<string, object?>();
-
-            if (req.DocumentType.HasValue) patch["documentType"] = req.DocumentType.Value;
-            if (req.DocumentLevel.HasValue) patch["documentLevel"] = req.DocumentLevel.Value;
-            if (req.DocumentDescription is not null) patch["documentDescription"] = req.DocumentDescription;
-            if (req.FileNames is not null) patch["fileNames"] = req.FileNames;
-
-            if (patch.Count == 0) return false;
-
-            var patchJson = JsonSerializer.Serialize(patch, JsonOpts);
-
-            var sql = $@"
-                update authdetail a
-                set data = jsonb_set(
-                  coalesce(a.data,'{{}}'::jsonb),
-                  '{{{DocsKey}}}',
-                  (
-                    select coalesce(
-                      jsonb_agg(
+            const string sql = @"
+                  update authdetail a
+                  set data = jsonb_set(
+                    coalesce(a.data, '{}'::jsonb),
+                    '{authDocuments}',
+                    coalesce((
+                      select jsonb_agg(
                         case
                           when d->>'documentId' = @documentId::text then
-                            (d || @patch::jsonb || jsonb_build_object('updatedOn', to_jsonb(now()), 'updatedBy', to_jsonb(@userId)))
+                            (d
+                              || jsonb_build_object(
+                                'documentType', coalesce(to_jsonb(@documentType), d->'documentType'),
+                                'documentDescription', coalesce(@documentDescription, d->>'documentDescription'),
+                                'fileNames', coalesce(to_jsonb(@fileNames::text[]), d->'fileNames'),
+                                'updatedBy', @userId,
+                                'updatedOn', now()
+                              )
+                            )
                           else d
                         end
-                      ),
-                      '[]'::jsonb
-                    )
-                    from jsonb_array_elements(coalesce(a.data->'{DocsKey}','[]'::jsonb)) d
+                        order by (d->>'createdOn')::timestamptz desc
+                      )
+                      from jsonb_array_elements(coalesce(a.data->'authDocuments','[]'::jsonb)) d
+                    ), '[]'::jsonb),
+                    true
                   ),
-                  true
-                ),
-                updatedon = now(),
-                updatedby = @userId
-                where a.authdetailid = @authDetailId
-                  and a.deletedon is null;";
+                  updatedon = now(),
+                  updatedby = @userId
+                  where a.authdetailid = @authDetailId
+                    and a.deletedon is null;";
 
             await using var conn = CreateConn();
-            await LockAuthRow(conn, authDetailId, ct);
+            var rows = await conn.ExecuteAsync(new CommandDefinition(sql, new
+            {
+                authDetailId,
+                documentId,
+                documentType = req.DocumentType,
+                documentDescription = req.DocumentDescription,
+                fileNames = (req.FileNames ?? new List<string>()).ToArray(),
+                userId
+            }, cancellationToken: ct));
 
-            var rows = await conn.ExecuteAsync(
-                new CommandDefinition(sql, new { authDetailId, documentId, patch = patchJson, userId }, cancellationToken: ct));
-
-            return rows > 0;
+            if (rows == 0) throw new InvalidOperationException("Auth not found or deleted.");
+            else
+                return rows > 0;
         }
 
         public async Task<bool> SoftDeleteDocumentAsync(long authDetailId, Guid documentId, int userId, CancellationToken ct = default)
         {
-            var sql = $@"
-                update authdetail a
-                set data = jsonb_set(
-                  coalesce(a.data,'{{}}'::jsonb),
-                  '{{{DocsKey}}}',
-                  (
-                    select coalesce(
-                      jsonb_agg(
+            const string sql = @"
+                  update authdetail a
+                  set data = jsonb_set(
+                    coalesce(a.data, '{}'::jsonb),
+                    '{authDocuments}',
+                    coalesce((
+                      select jsonb_agg(
                         case
                           when d->>'documentId' = @documentId::text then
-                            (d || jsonb_build_object('deletedBy', to_jsonb(@userId), 'deletedOn', to_jsonb(now())))
+                            (d || jsonb_build_object('deletedBy', @userId, 'deletedOn', now()))
                           else d
                         end
-                      ),
-                      '[]'::jsonb
-                    )
-                    from jsonb_array_elements(coalesce(a.data->'{DocsKey}','[]'::jsonb)) d
+                        order by (d->>'createdOn')::timestamptz desc
+                      )
+                      from jsonb_array_elements(coalesce(a.data->'authDocuments','[]'::jsonb)) d
+                    ), '[]'::jsonb),
+                    true
                   ),
-                  true
-                ),
-                updatedon = now(),
-                updatedby = @userId
-                where a.authdetailid = @authDetailId
-                  and a.deletedon is null;";
+                  updatedon = now(),
+                  updatedby = @userId
+                  where a.authdetailid = @authDetailId
+                    and a.deletedon is null;";
 
             await using var conn = CreateConn();
-            await LockAuthRow(conn, authDetailId, ct);
-
-            var rows = await conn.ExecuteAsync(
-                new CommandDefinition(sql, new { authDetailId, documentId, userId }, cancellationToken: ct));
-
-            return rows > 0;
+            var rows = await conn.ExecuteAsync(new CommandDefinition(sql, new { authDetailId, documentId, userId }, cancellationToken: ct));
+            if (rows == 0) throw new InvalidOperationException("Auth not found or deleted.");
+            else
+                return rows > 0;
         }
 
         private static async Task LockAuthRow(NpgsqlConnection conn, long authDetailId, CancellationToken ct)

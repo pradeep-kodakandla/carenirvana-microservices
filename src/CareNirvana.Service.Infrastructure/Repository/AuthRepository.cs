@@ -4,6 +4,7 @@ using Dapper;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using System.Data;
+using System.Text.Json;
 
 namespace CareNirvana.Service.Infrastructure.Repository
 {
@@ -253,5 +254,49 @@ namespace CareNirvana.Service.Infrastructure.Repository
             await using var conn = CreateConn();
             await conn.ExecuteAsync(sql, new { authDetailId, userId });
         }
+
+        public async Task<TemplateSectionsResponse?> GetDecisionTemplateAsync( int authTemplateId, CancellationToken ct = default)
+        {
+            const string sql = @"
+                SELECT COALESCE(jsonb_agg(s.section), '[]'::jsonb)::text AS sections
+                FROM cfgcasetemplate ct
+                CROSS JOIN LATERAL (
+                    SELECT jsonb_path_query(
+                             ct.jsoncontent::jsonb,
+                             '$.** ? (@.sectionName == $d1 || @.sectionName == $d2 || @.sectionName == $d3)',
+                             jsonb_build_object(
+                                'd1', to_jsonb(@d1),
+                                'd2', to_jsonb(@d2),
+                                'd3', to_jsonb(@d3)
+                             )
+                           ) AS section
+                ) s
+                WHERE ct.casetemplateid = @authTemplateId;";
+
+            await using var conn = CreateConn();
+
+            var sectionsJson = await conn.ExecuteScalarAsync<string>(
+                new CommandDefinition(sql, new
+                {
+                    authTemplateId,
+                    d1 = "Decision Details",
+                    d2 = "Member Provider Decision Info",
+                    d3 = "Decision Notes"
+                }, cancellationToken: ct)
+            );
+
+            if (string.IsNullOrWhiteSpace(sectionsJson))
+                return null;
+
+            using var doc = JsonDocument.Parse(sectionsJson);
+
+            return new TemplateSectionsResponse
+            {
+                CaseTemplateId = authTemplateId, // rename property if you want (see note below)
+                GroupName = "Decision",
+                Sections = doc.RootElement.Clone()
+            };
+        }
+
     }
 }
