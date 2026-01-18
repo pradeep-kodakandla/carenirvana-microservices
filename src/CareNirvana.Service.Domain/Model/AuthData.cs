@@ -67,8 +67,7 @@ namespace CareNirvana.Service.Domain.Model
         public string NoteText { get; set; } = "";
 
         public int? NoteType { get; set; }       // from UM: authorizationNoteType
-        public int? NoteLevel { get; set; }      // optional, if you have it
-        public bool? AuthAlertNote { get; set; } // from UM: authorizationAlertNote
+        public bool? AuthAlertNote { get; set; } = false;// from UM: authorizationAlertNote
         public DateTime? EncounteredOn { get; set; }  // from UM: noteEncounteredDatetime
         public DateTime? AlertEndDate { get; set; }   // from UM: newDate_copy_q5d60fyd5
 
@@ -85,8 +84,7 @@ namespace CareNirvana.Service.Domain.Model
     {
         public string? NoteText { get; set; }
         public int? NoteType { get; set; }
-        public int? NoteLevel { get; set; }
-        public bool? AuthAlertNote { get; set; }
+        public bool? AuthAlertNote { get; set; } = false;
         public DateTime? EncounteredOn { get; set; }
         public DateTime? AlertEndDate { get; set; }
     }
@@ -96,7 +94,6 @@ namespace CareNirvana.Service.Domain.Model
     {
         public string? NoteText { get; set; }
         public int? NoteType { get; set; }
-        public int? NoteLevel { get; set; }
         public bool? AuthAlertNote { get; set; }
         public DateTime? EncounteredOn { get; set; }
         public DateTime? AlertEndDate { get; set; }
@@ -153,5 +150,28 @@ namespace CareNirvana.Service.Domain.Model
         public JsonElement Section { get; set; }
     }
 
+
+    public sealed class DecisionSectionItemDto
+    {
+        public Guid ItemId { get; set; }
+        public JsonElement Data { get; set; }
+
+        public long CreatedBy { get; set; }
+        public DateTime CreatedOn { get; set; }
+        public long? UpdatedBy { get; set; }
+        public DateTime? UpdatedOn { get; set; }
+        public long? DeletedBy { get; set; }
+        public DateTime? DeletedOn { get; set; }
+    }
+
+    public sealed class CreateDecisionSectionItemRequest
+    {
+        public JsonElement Data { get; set; } // entire section payload as json
+    }
+
+    public sealed class UpdateDecisionSectionItemRequest
+    {
+        public JsonElement? Data { get; set; } // partial/replace (you choose)
+    }
 
 }

@@ -13,6 +13,11 @@ namespace CareNirvana.Service.Application.Interfaces
         Task SoftDeleteAuthAsync(long authDetailId, int userId);
 
         Task<TemplateSectionsResponse?> GetDecisionTemplateAsync(int authTemplateId, CancellationToken ct = default);
+
+        Task<IReadOnlyList<DecisionSectionItemDto>> GetDecisionSectionItemsAsync(long authDetailId, string sectionName, CancellationToken ct = default);
+        Task<Guid> InsertDecisionSectionItemAsync(long authDetailId, string sectionName, CreateDecisionSectionItemRequest req, int userId, CancellationToken ct = default);
+        Task<bool> UpdateDecisionSectionItemAsync(long authDetailId, string sectionName, Guid itemId, UpdateDecisionSectionItemRequest req, int userId, CancellationToken ct = default);
+        Task<bool> SoftDeleteDecisionSectionItemAsync(long authDetailId, string sectionName, Guid itemId, int userId, CancellationToken ct = default);
     }
 
     public interface IAuthNotesRepository
@@ -32,4 +37,6 @@ namespace CareNirvana.Service.Application.Interfaces
         Task<bool> UpdateDocumentAsync(long authDetailId, Guid documentId, UpdateAuthDocumentRequest req, int userId, CancellationToken ct = default);
         Task<bool> SoftDeleteDocumentAsync(long authDetailId, Guid documentId, int userId, CancellationToken ct = default);
     }
+
+
 }

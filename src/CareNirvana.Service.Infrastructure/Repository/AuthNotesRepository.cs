@@ -91,30 +91,29 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
             const string sql = @"
                   update authdetail a
-                  set data = jsonb_set(
-                      coalesce(a.data, '{}'::jsonb),
-                      '{authNotes}',
-                      coalesce(a.data->'authNotes', '[]'::jsonb) || jsonb_build_object(
-                        'noteId', @noteId::text,
-                        'noteText', coalesce(@noteText, ''),
-                        'noteType', @noteType,
-                        'noteLevel', @noteLevel,
-                        'authAlertNote', @authAlertNote,
-                        'encounteredOn', @encounteredOn,
-                        'alertEndDate', @alertEndDate,
-                        'createdBy', @userId,
-                        'createdOn', now(),
-                        'updatedBy', null,
-                        'updatedOn', null,
-                        'deletedBy', null,
-                        'deletedOn', null
-                      ),
-                      true
-                  ),
-                  updatedon = now(),
-                  updatedby = @userId
-                  where a.authdetailid = @authDetailId
-                    and a.deletedon is null;";
+                        set data = jsonb_set(
+                            coalesce(a.data, '{}'::jsonb),
+                            '{authNotes}',
+                            coalesce(a.data->'authNotes', '[]'::jsonb) || jsonb_build_object(
+                              'noteId', @noteId::text,
+                              'noteText', coalesce(@noteText, ''),
+                              'noteType', to_jsonb(@noteType::int),
+                              'authAlertNote', to_jsonb(@authAlertNote::boolean),
+                              'encounteredOn', to_jsonb(@encounteredOn::timestamp),
+                              'alertEndDate', to_jsonb(@alertEndDate::timestamp),
+                              'createdBy', @userId,
+                              'createdOn', now(),
+                              'updatedBy', null,
+                              'updatedOn', null,
+                              'deletedBy', null,
+                              'deletedOn', null
+                            ),
+                            true
+                        ),
+                        updatedon = now(),
+                        updatedby = @userId
+                        where a.authdetailid = @authDetailId
+                          and a.deletedon is null;";
 
             await using var conn = CreateConn();
             var rows = await conn.ExecuteAsync(new CommandDefinition(sql, new
@@ -123,8 +122,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 noteId,
                 noteText = req.NoteText,
                 noteType = req.NoteType,
-                noteLevel = req.NoteLevel,
-                authAlertNote = req.AuthAlertNote,
+                authAlertNote = req.EncounteredOn.HasValue ? true : false,
                 encounteredOn = req.EncounteredOn,
                 alertEndDate = req.AlertEndDate,
                 userId
@@ -150,7 +148,6 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                 || jsonb_build_object(
                                   'noteText', coalesce(@noteText, n->>'noteText'),
                                   'noteType', coalesce(to_jsonb(@noteType), n->'noteType'),
-                                  'noteLevel', coalesce(to_jsonb(@noteLevel), n->'noteLevel'),
                                   'authAlertNote', coalesce(to_jsonb(@authAlertNote), n->'authAlertNote'),
                                   'encounteredOn', coalesce(to_jsonb(@encounteredOn), n->'encounteredOn'),
                                   'alertEndDate', coalesce(to_jsonb(@alertEndDate), n->'alertEndDate'),
@@ -178,8 +175,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 noteId,
                 noteText = req.NoteText,
                 noteType = req.NoteType,
-                noteLevel = req.NoteLevel,
-                authAlertNote = req.AuthAlertNote,
+                authAlertNote = req.EncounteredOn.HasValue ? true : false,
                 encounteredOn = req.EncounteredOn,
                 alertEndDate = req.AlertEndDate,
                 userId

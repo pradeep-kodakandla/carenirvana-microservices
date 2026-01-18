@@ -255,11 +255,11 @@ namespace CareNirvana.Service.Infrastructure.Repository
             await conn.ExecuteAsync(sql, new { authDetailId, userId });
         }
 
-        public async Task<TemplateSectionsResponse?> GetDecisionTemplateAsync( int authTemplateId, CancellationToken ct = default)
+        public async Task<TemplateSectionsResponse?> GetDecisionTemplateAsync(int authTemplateId, CancellationToken ct = default)
         {
             const string sql = @"
                 SELECT COALESCE(jsonb_agg(s.section), '[]'::jsonb)::text AS sections
-                FROM cfgcasetemplate ct
+                FROM cfgauthtemplate ct
                 CROSS JOIN LATERAL (
                     SELECT jsonb_path_query(
                              ct.jsoncontent::jsonb,
@@ -271,7 +271,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                              )
                            ) AS section
                 ) s
-                WHERE ct.casetemplateid = @authTemplateId;";
+                WHERE ct.authtemplateid = @authTemplateId;";
 
             await using var conn = CreateConn();
 
@@ -296,6 +296,182 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 GroupName = "Decision",
                 Sections = doc.RootElement.Clone()
             };
+        }
+
+        private static string MapDecisionSectionToKey(string sectionName) => sectionName switch
+        {
+            "Decision Details" => "decisionDetails",
+            "Member Provider Decision Info" => "memberProviderDecisionInfo",
+            "Decision Notes" => "decisionNotes",
+            _ => throw new ArgumentOutOfRangeException(nameof(sectionName), $"Unsupported section: {sectionName}")
+        };
+
+        public async Task<IReadOnlyList<DecisionSectionItemDto>> GetDecisionSectionItemsAsync(long authDetailId, string sectionName, CancellationToken ct = default)
+        {
+            var sectionKey = MapDecisionSectionToKey(sectionName);
+
+            const string sql = @"
+                select coalesce(
+                  (
+                    select jsonb_agg(n order by (n->>'createdOn')::timestamptz desc)
+                    from jsonb_array_elements(coalesce(a.data->@sectionKey, '[]'::jsonb)) n
+                    where n->>'deletedBy' is null
+                  ),
+                  '[]'::jsonb
+                )::text as items
+                from authdetail a
+                where a.authdetailid = @authDetailId
+                  and a.deletedon is null;";
+
+            await using var conn = CreateConn();
+            var itemsJson = await conn.ExecuteScalarAsync<string>(
+                new CommandDefinition(sql, new { authDetailId, sectionKey }, cancellationToken: ct));
+
+            return JsonSerializer.Deserialize<List<DecisionSectionItemDto>>(itemsJson ?? "[]", JsonOpts)
+                   ?? new List<DecisionSectionItemDto>();
+        }
+
+        private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web)
+        {
+            PropertyNameCaseInsensitive = true
+        };
+
+
+        public async Task<Guid> InsertDecisionSectionItemAsync(long authDetailId, string sectionName, CreateDecisionSectionItemRequest req, int userId, CancellationToken ct = default)
+        {
+            var sectionKey = MapDecisionSectionToKey(sectionName);
+            var itemId = Guid.NewGuid();
+            var path = new[] { sectionKey };
+            var dataJson = req.Data.GetRawText();
+
+            const string sql = @"
+                update authdetail a
+                set data = jsonb_set(
+                    coalesce(a.data, '{}'::jsonb),
+                    @path,
+                    coalesce(a.data->@sectionKey, '[]'::jsonb) || jsonb_build_object(
+                      'itemId', @itemId::text,
+                      'data', @data::jsonb,
+                      'createdBy', @userId,
+                      'createdOn', now(),
+                      'updatedBy', null,
+                      'updatedOn', null,
+                      'deletedBy', null,
+                      'deletedOn', null
+                    ),
+                    true
+                ),
+                updatedon = now(),
+                updatedby = @userId
+                where a.authdetailid = @authDetailId
+                  and a.deletedon is null;";
+
+            await using var conn = CreateConn();
+            var rows = await conn.ExecuteAsync(new CommandDefinition(sql, new
+            {
+                authDetailId,
+                sectionKey,
+                path,
+                itemId,
+                data = dataJson,
+                userId
+            }, cancellationToken: ct));
+
+            if (rows == 0) throw new InvalidOperationException("Auth not found or deleted.");
+            return itemId;
+        }
+
+        public async Task<bool> UpdateDecisionSectionItemAsync(long authDetailId, string sectionName, Guid itemId, UpdateDecisionSectionItemRequest req, int userId, CancellationToken ct = default)
+        {
+            var sectionKey = MapDecisionSectionToKey(sectionName);
+            var path = new[] { sectionKey };
+            var dataJson = req.Data.HasValue ? req.Data.Value.GetRawText() : null;
+
+            const string sql = @"
+                update authdetail a
+                set data = jsonb_set(
+                    coalesce(a.data, '{}'::jsonb),
+                    @path,
+                    coalesce((
+                      select jsonb_agg(
+                        case
+                          when n->>'itemId' = @itemId::text then
+                            (n || jsonb_build_object(
+                              'data', coalesce(@data::jsonb, n->'data'),
+                              'updatedBy', @userId,
+                              'updatedOn', now()
+                            ))
+                          else n
+                        end
+                        order by (n->>'createdOn')::timestamptz desc
+                      )
+                      from jsonb_array_elements(coalesce(a.data->@sectionKey, '[]'::jsonb)) n
+                    ), '[]'::jsonb),
+                    true
+                ),
+                updatedon = now(),
+                updatedby = @userId
+                where a.authdetailid = @authDetailId
+                  and a.deletedon is null;";
+
+            await using var conn = CreateConn();
+            var rows = await conn.ExecuteAsync(new CommandDefinition(sql, new
+            {
+                authDetailId,
+                sectionKey,
+                path,
+                itemId,
+                data = dataJson, // null allowed, cast in SQL is safe
+                userId
+            }, cancellationToken: ct));
+
+            if (rows == 0) throw new InvalidOperationException("Auth not found or deleted.");
+            return rows > 0;
+        }
+
+        public async Task<bool> SoftDeleteDecisionSectionItemAsync(long authDetailId, string sectionName, Guid itemId, int userId, CancellationToken ct = default)
+        {
+            var sectionKey = MapDecisionSectionToKey(sectionName);
+            var path = new[] { sectionKey };
+
+            const string sql = @"
+                update authdetail a
+                set data = jsonb_set(
+                    coalesce(a.data, '{}'::jsonb),
+                    @path,
+                    coalesce((
+                      select jsonb_agg(
+                        case
+                          when n->>'itemId' = @itemId::text then
+                            (n || jsonb_build_object(
+                              'deletedBy', @userId,
+                              'deletedOn', now()
+                            ))
+                          else n
+                        end
+                        order by (n->>'createdOn')::timestamptz desc
+                      )
+                      from jsonb_array_elements(coalesce(a.data->@sectionKey, '[]'::jsonb)) n
+                    ), '[]'::jsonb),
+                    true
+                ),
+                updatedon = now(),
+                updatedby = @userId
+                where a.authdetailid = @authDetailId
+                  and a.deletedon is null;";
+
+            await using var conn = CreateConn();
+            var rows = await conn.ExecuteAsync(new CommandDefinition(sql, new
+            {
+                authDetailId,
+                sectionKey,
+                path,
+                itemId,
+                userId
+            }, cancellationToken: ct));
+
+            if (rows == 0) throw new InvalidOperationException("Auth not found or deleted.");
+            return rows > 0;
         }
 
     }

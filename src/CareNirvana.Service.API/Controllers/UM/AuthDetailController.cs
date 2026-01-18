@@ -219,5 +219,52 @@ namespace CareNirvana.Service.Api.Controllers
             if (template == null) return NotFound();
             return Ok(template);
         }
+
+        [HttpGet("{authDetailId:long}/decision/{sectionName}/items")]
+        public async Task<ActionResult<IReadOnlyList<DecisionSectionItemDto>>> GetDecisionSectionItems(
+            long authDetailId,
+            string sectionName,
+            CancellationToken ct)
+        {
+            var items = await _authRepo.GetDecisionSectionItemsAsync(authDetailId, sectionName, ct);
+            return Ok(items);
+        }
+        [HttpPost("{authDetailId:long}/decision/{sectionName}/items")]
+        public async Task<ActionResult<Guid>> CreateDecisionSectionItem(
+            long authDetailId,
+            string sectionName,
+            [FromBody] CreateDecisionSectionItemRequest req,
+            [FromQuery] int userId,
+            CancellationToken ct)
+        {
+            var itemId = await _authRepo.InsertDecisionSectionItemAsync(authDetailId, sectionName, req, userId, ct);
+            return Ok(itemId);
+
+        }
+
+        [HttpPut("{authDetailId:long}/decision/{sectionName}/items/{itemId:guid}")]
+        public async Task<IActionResult> UpdateDecisionSectionItem(
+            long authDetailId,
+            string sectionName,
+            Guid itemId,
+            [FromBody] UpdateDecisionSectionItemRequest req,
+            [FromQuery] int userId,
+            CancellationToken ct)
+        {
+            var ok = await _authRepo.UpdateDecisionSectionItemAsync(authDetailId, sectionName, itemId, req, userId, ct);
+            return ok ? NoContent() : NotFound();
+        }
+
+        [HttpDelete("{authDetailId:long}/decision/{sectionName}/items/{itemId:guid}")]
+        public async Task<IActionResult> DeleteDecisionSectionItem(
+            long authDetailId,
+            string sectionName,
+            Guid itemId,
+            [FromQuery] int userId,
+            CancellationToken ct)
+        {
+            var ok = await _authRepo.SoftDeleteDecisionSectionItemAsync(authDetailId, sectionName, itemId, userId, ct);
+            return ok ? NoContent() : NotFound();
+        }
     }
 }
