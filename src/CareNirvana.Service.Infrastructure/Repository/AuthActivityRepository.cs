@@ -175,7 +175,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 cmd = new NpgsqlCommand(@"
             UPDATE authactivity SET 
                 authdetailid = @authdetailid, activitytypeid = @activitytypeid, priorityid = @priorityid,
-                providerid = @providerid, followupdatetime = @followupdatetime, duedate = @duedate, referto = @referredto,
+                providerid = @providerid, followupdatetime = @followupdatetime, duedate = @duedate, 
                 isworkbasket = @isworkbasket, queueid = @queueid, comment = @comment, statusid = @statusid,
                 performeddatetime = @performeddatetime, performedby = @performedby, activeflag = @activeflag,
                 updatedon = @updatedon, updatedby = @updatedby
