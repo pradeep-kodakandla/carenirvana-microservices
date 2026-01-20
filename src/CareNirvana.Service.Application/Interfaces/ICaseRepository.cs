@@ -15,6 +15,14 @@ namespace CareNirvana.Service.Application.Interfaces
         Task SoftDeleteCaseHeaderAsync(long caseHeaderId, long userId, bool cascadeDetails = true);
         Task SoftDeleteCaseDetailAsync(long caseDetailId, long userId);
         Task<IReadOnlyList<AgCaseRow>> GetAgCasesByMemberAsync(int memberDetailId, CancellationToken ct = default);
+
+        Task AcceptRejectCaseWorkgroupAsync(
+            long caseWorkgroupId,
+            string actionType,      // "ACCEPT" or "REJECT"
+            string? comment,
+            int userId,
+            int completedStatusId   // required when ACCEPT
+        );
     }
 
     public interface ICaseNotesRepository

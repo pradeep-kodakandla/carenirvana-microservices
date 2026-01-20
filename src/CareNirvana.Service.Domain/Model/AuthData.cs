@@ -26,6 +26,14 @@ namespace CareNirvana.Service.Domain.Model
         public string? CreatedByUserName { get; set; }
         public int? MemberId { get; set; }
         public string? MemberName { get; set; }
+        public bool IsWorkgroupAssigned { get; set; }
+        public bool IsWorkgroupPending { get; set; }
+
+        // Optional (recommended for UI)
+        public int[]? AssignedWorkgroupWorkbasketIds { get; set; }
+
+        public long? AuthWorkgroupId { get; set; } // optional if you want to show/action later
+
 
     }
 
@@ -40,9 +48,18 @@ namespace CareNirvana.Service.Domain.Model
         public int? AuthClassId { get; set; }
         public int? AuthAssignedTo { get; set; }
         public int? AuthStatus { get; set; }
-
-        /// Raw JSON object/array you want in authdetail.data
         public string JsonData { get; set; } = "{}";
+
+        public string RequestType { get; set; } = "AUTH";
+        public long? AuthActivityId { get; set; }
+
+        // Backward-compatible single
+        public int? WorkgroupWorkbasketId { get; set; }
+
+        // New multi
+        public List<int>? WorkgroupWorkbasketIds { get; set; }
+
+        public int? GroupStatusId { get; set; } // optional
     }
 
     public class UpdateAuthRequest
@@ -54,10 +71,17 @@ namespace CareNirvana.Service.Domain.Model
         public int? AuthClassId { get; set; }
         public int? AuthAssignedTo { get; set; }
         public int? AuthStatus { get; set; }
-
-        /// If provided, replaces entire data jsonb
         public string? JsonData { get; set; }
+
+        public string RequestType { get; set; } = "AUTH";
+        public long? AuthActivityId { get; set; }
+
+        public int? WorkgroupWorkbasketId { get; set; }
+        public List<int>? WorkgroupWorkbasketIds { get; set; }
+
+        public int? GroupStatusId { get; set; } // optional
     }
+
 
     // -------- Notes (stored inside authdetail.data jsonb) --------
 
@@ -173,5 +197,60 @@ namespace CareNirvana.Service.Domain.Model
     {
         public JsonElement? Data { get; set; } // partial/replace (you choose)
     }
+
+    public sealed class AuthWorkgroupRow
+    {
+        public long AuthWorkgroupId { get; set; }
+        public string RequestType { get; set; } = "AUTH"; // AUTH | ACTIVITY
+        public long AuthDetailId { get; set; }
+        public long? AuthActivityId { get; set; }
+        public int WorkgroupWorkbasketId { get; set; }
+        public int? GroupStatusId { get; set; }
+        public bool ActiveFlag { get; set; }
+        public DateTime CreatedOn { get; set; }
+        public int? CreatedBy { get; set; }
+        public DateTime? UpdatedOn { get; set; }
+        public int? UpdatedBy { get; set; }
+    }
+
+    public sealed class AuthWorkgroupActionRow
+    {
+        public long AuthWorkgroupActionId { get; set; }
+        public long AuthWorkgroupId { get; set; }
+        public int UserId { get; set; }          // user who accepted/rejected
+        public string ActionType { get; set; } = ""; // ACCEPT | REJECT (or your enum)
+        public DateTime ActionOn { get; set; }
+        public string? Comment { get; set; }
+        public bool ActiveFlag { get; set; }
+        public DateTime CreatedOn { get; set; }
+        public int? CreatedBy { get; set; }
+        public DateTime? UpdatedOn { get; set; }
+        public int? UpdatedBy { get; set; }
+    }
+
+    public sealed class SaveAuthWorkgroupRequest
+    {
+        public string RequestType { get; set; } = "AUTH"; // AUTH | ACTIVITY
+        public long AuthDetailId { get; set; }
+        public long? AuthActivityId { get; set; }
+
+        // If null => means "not selected" and we should fallback assignment behavior
+        public int? WorkgroupWorkbasketId { get; set; }
+        public int? GroupStatusId { get; set; }
+
+        // optional action logging
+        public string? ActionType { get; set; }  // ACCEPT | REJECT
+        public string? Comment { get; set; }
+    }
+
+    public sealed class SaveAuthWorkgroupsRequest
+    {
+        public string RequestType { get; set; } = "AUTH"; // AUTH | ACTIVITY
+        public long AuthDetailId { get; set; }
+        public long? AuthActivityId { get; set; }         // required for ACTIVITY
+        public int[] WorkgroupWorkbasketIds { get; set; } = Array.Empty<int>();
+        public int? GroupStatusId { get; set; }           // optional (you can set on insert)
+    }
+
 
 }

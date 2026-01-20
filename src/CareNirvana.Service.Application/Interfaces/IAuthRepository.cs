@@ -18,6 +18,8 @@ namespace CareNirvana.Service.Application.Interfaces
         Task<Guid> InsertDecisionSectionItemAsync(long authDetailId, string sectionName, CreateDecisionSectionItemRequest req, int userId, CancellationToken ct = default);
         Task<bool> UpdateDecisionSectionItemAsync(long authDetailId, string sectionName, Guid itemId, UpdateDecisionSectionItemRequest req, int userId, CancellationToken ct = default);
         Task<bool> SoftDeleteDecisionSectionItemAsync(long authDetailId, string sectionName, Guid itemId, int userId, CancellationToken ct = default);
+
+        Task AcceptRejectAuthWorkgroupAsync( long authWorkgroupId, string actionType, string? comment, int userId, int completedStatusId   );
     }
 
     public interface IAuthNotesRepository

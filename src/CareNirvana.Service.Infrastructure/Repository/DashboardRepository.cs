@@ -75,15 +75,109 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
             // One round-trip: compute all counts using scalar subqueries
             const string sql = @"
-            SELECT
-                (SELECT COUNT(DISTINCT m.memberdetailsid)  FROM public.membercarestaff m   WHERE m.userid = @userId AND COALESCE(m.activeflag, true) = true) AS mymembercount,
-                (SELECT COUNT(*) FROM public.authdetail a WHERE a.authassignedto = @userId) AS authcount,
-                (SELECT COUNT(*) FROM public.memberactivity a WHERE a.referto is null) AS requestcount,
-                (SELECT COUNT(*) FROM public.authactivity aa WHERE aa.referto = @userId and aa.service_line_count=0) AS activitycount,
-                (SELECT COUNT(*) FROM public.authactivity aa WHERE aa.referto = @userId and aa.service_line_count<>0 and md_review_status <> 'Approved') AS wqcount,
-                (SELECT COUNT(*) FROM public.CASEHEADER ch where ch.createdby= @userId) AS casecount,
-                (SELECT COUNT(*) FROM public.faxfiles ) AS faxcount
-            ;";
+           SELECT
+                  (SELECT COUNT(DISTINCT m.memberdetailsid)
+                   FROM public.membercarestaff m
+                   WHERE m.userid = @userId
+                     AND COALESCE(m.activeflag, true) = true
+                  ) AS mymembercount,
+
+                  (SELECT COUNT(*)
+                   FROM public.authdetail a
+                   WHERE a.authassignedto = @userId
+                  ) AS authcount,
+
+                  (
+                    WITH pending AS (
+
+                      -- CM
+                      SELECT DISTINCT maw.memberactivityworkgroupid AS item_id
+                      FROM cfguserworkgroup cug
+                      JOIN cfgworkgroupworkbasket cww
+                        ON cww.workgroupworkbasketid = cug.workgroupworkbasketid
+                      JOIN memberactivityworkgroup maw
+                        ON maw.workgroupworkbasketid = cug.workgroupworkbasketid
+                      JOIN memberactivity ma
+                        ON ma.memberactivityid = maw.memberactivityid
+                      WHERE COALESCE(cug.activeflag, TRUE) = TRUE
+                        AND COALESCE(maw.activeflag, TRUE) = TRUE
+                        AND (@userId IS NULL OR cug.userid = @userId)
+                        AND ma.referto IS NULL
+                        AND ma.isworkbasket = TRUE
+                        AND ma.deletedon IS NULL
+                        AND COALESCE(ma.activeflag, TRUE) = TRUE
+
+                      UNION ALL
+
+                      -- UM (AUTH)
+                      SELECT DISTINCT awg.authworkgroupid AS item_id
+                      FROM cfguserworkgroup cug
+                      JOIN cfgworkgroupworkbasket cww
+                        ON cww.workgroupworkbasketid = cug.workgroupworkbasketid
+                      JOIN authworkgroup awg
+                        ON awg.workgroupworkbasketid = cug.workgroupworkbasketid
+                       AND awg.requesttype = 'AUTH'
+                       AND COALESCE(awg.activeflag, TRUE) = TRUE
+                      JOIN authdetail a
+                        ON a.authdetailid = awg.authdetailid
+                      WHERE COALESCE(cug.activeflag, TRUE) = TRUE
+                        AND (@userId IS NULL OR cug.userid = @userId)
+                        AND a.deletedon IS NULL
+                        AND a.authassignedto IS NULL
+                        AND NOT EXISTS (
+                          SELECT 1
+                          FROM authworkgroupaction awa
+                          WHERE awa.authworkgroupid = awg.authworkgroupid
+                            AND COALESCE(awa.activeflag, TRUE) = TRUE
+                            AND upper(awa.actiontype) IN ('ACCEPT','ACCEPTED')
+                          LIMIT 1
+                        )
+
+                      UNION ALL
+
+                      -- AG (CASE)
+                      SELECT DISTINCT cw.caseworkgroupid AS item_id
+                      FROM cfguserworkgroup cug
+                      JOIN cfgworkgroupworkbasket cww
+                        ON cww.workgroupworkbasketid = cug.workgroupworkbasketid
+                      JOIN caseworkgroup cw
+                        ON cw.workgroupworkbasketid = cug.workgroupworkbasketid
+                       AND cw.requesttype = 'CASE'
+                       AND COALESCE(cw.activeflag, TRUE) = TRUE
+                      WHERE COALESCE(cug.activeflag, TRUE) = TRUE
+                        AND (@userId IS NULL OR cug.userid = @userId)
+                        AND NOT EXISTS (
+                          SELECT 1
+                          FROM caseworkgroupaction cwa
+                          WHERE cwa.caseworkgroupid = cw.caseworkgroupid
+                            AND COALESCE(cwa.activeflag, TRUE) = TRUE
+                            AND upper(cwa.actiontype) IN ('ACCEPT','ACCEPTED')
+                          LIMIT 1
+                        )
+                    )
+                    SELECT COUNT(*) FROM pending
+                  ) AS requestcount,
+
+                  (SELECT COUNT(*)
+                   FROM public.authactivity aa
+                   WHERE aa.referto = @userId
+                     AND aa.service_line_count = 0
+                  ) AS activitycount,
+
+                  (SELECT COUNT(*)
+                   FROM public.authactivity aa
+                   WHERE aa.referto = @userId
+                     AND aa.service_line_count <> 0
+                     AND md_review_status <> 'Approved'
+                  ) AS wqcount,
+
+                  (SELECT COUNT(*)
+                   FROM public.CASEHEADER ch
+                   WHERE ch.createdby = @userId
+                  ) AS casecount,
+
+                  (SELECT COUNT(*) FROM public.faxfiles) AS faxcount;
+                ";
 
             using var cmd = new NpgsqlCommand(sql, connection);
             cmd.Parameters.AddWithValue("@userId", userId);
@@ -611,7 +705,11 @@ namespace CareNirvana.Service.Infrastructure.Repository
         public async Task<List<ActivityRequestItem>> GetRequestActivitiesAsync(int? userId = null)
         {
             const string sql = @"
-                    SELECT distinct
+                    (
+                -- =========================
+                -- CM (your existing query)
+                -- =========================
+                SELECT distinct
                     'CM' AS module,
                     md.firstname,
                     md.lastname,
@@ -629,54 +727,207 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     NULL::text AS authnumber,
                     COALESCE(rj.rejectedcount, 0)                    AS rejectedcount,
                     COALESCE(rj.rejecteduserids, ARRAY[]::integer[]) AS rejecteduserids,
-                    wg.workgroupid                                  AS workgroupid,
+                    wg.workgroupid                                   AS workgroupid,
                     wg.workgroupname                                 AS workgroupname,
                     wb.workbasketid                                  AS workbasketid,
-                    wb.workbasketname                                 AS workbasketname,
-                    maw.memberactivityworkgroupid AS memberactivityworkgroupid
-                        FROM cfguserworkgroup cug
-                        JOIN cfgworkgroupworkbasket cww
-	                        ON cww.workgroupworkbasketid = cug.workgroupworkbasketid
-                        JOIN cfgworkgroup wg
-                          ON wg.workgroupid = cww.workgroupid
-                        JOIN cfgworkbasket wb
-                          ON wb.workbasketid = cww.workbasketid
-                        JOIN memberactivityworkgroup maw
-                          ON maw.workgroupworkbasketid = cug.workgroupworkbasketid
-                        JOIN memberactivity ma
-                          ON ma.memberactivityid = maw.memberactivityid
-                        JOIN memberdetails md
-                          ON md.memberdetailsid = ma.memberdetailsid
-                        LEFT JOIN LATERAL (
-                            SELECT elem->>'activityType' AS activitytype
-                            FROM cfgadmindata cad,
-                                 jsonb_array_elements(cad.jsoncontent::jsonb->'activitytype') elem
-                            WHERE (elem->>'id')::int = ma.activitytypeid
-                              AND cad.module = 'UM'
-                            LIMIT 1
-                        ) at ON TRUE
-                        LEFT JOIN (
-                            SELECT
-                                memberactivityworkgroupid,
-                                COUNT(*) FILTER (
-                                    WHERE actiontype = 'Rejected'
-                                      AND COALESCE(activeflag, TRUE) = TRUE
-                                ) AS rejectedcount,
-                                ARRAY_AGG(userid) FILTER (
-                                    WHERE actiontype = 'Rejected'
-                                      AND COALESCE(activeflag, TRUE) = TRUE
-                                ) AS rejecteduserids
-                            FROM memberactivityworkgroupaction
-                            GROUP BY memberactivityworkgroupid
-                        ) rj
-                          ON rj.memberactivityworkgroupid = maw.memberactivityworkgroupid
-                        WHERE  COALESCE(cug.activeflag, TRUE) = TRUE
-                          AND COALESCE(maw.activeflag, TRUE) = TRUE
-                          AND ma.referto IS NULL          -- still in pool (not accepted)
-                          AND ma.isworkbasket = TRUE      -- work basket activity
-                          AND ma.deletedon IS NULL
-                          AND COALESCE(ma.activeflag, TRUE) = TRUE
-                        ORDER BY ma.createdon DESC;";
+                    wb.workbasketname                                AS workbasketname,
+                    maw.memberactivityworkgroupid                    AS memberactivityworkgroupid
+                FROM cfguserworkgroup cug
+                JOIN cfgworkgroupworkbasket cww
+                    ON cww.workgroupworkbasketid = cug.workgroupworkbasketid
+                JOIN cfgworkgroup wg
+                    ON wg.workgroupid = cww.workgroupid
+                JOIN cfgworkbasket wb
+                    ON wb.workbasketid = cww.workbasketid
+                JOIN memberactivityworkgroup maw
+                    ON maw.workgroupworkbasketid = cug.workgroupworkbasketid
+                JOIN memberactivity ma
+                    ON ma.memberactivityid = maw.memberactivityid
+                JOIN memberdetails md
+                    ON md.memberdetailsid = ma.memberdetailsid
+                LEFT JOIN LATERAL (
+                    SELECT elem->>'activityType' AS activitytype
+                    FROM cfgadmindata cad,
+                         jsonb_array_elements(cad.jsoncontent::jsonb->'activitytype') elem
+                    WHERE (elem->>'id')::int = ma.activitytypeid
+                      AND cad.module = 'UM'
+                    LIMIT 1
+                ) at ON TRUE
+                LEFT JOIN (
+                    SELECT
+                        memberactivityworkgroupid,
+                        COUNT(*) FILTER (
+                            WHERE upper(actiontype) IN ('REJECT','REJECTED')
+                              AND COALESCE(activeflag, TRUE) = TRUE
+                        ) AS rejectedcount,
+                        ARRAY_AGG(userid) FILTER (
+                            WHERE upper(actiontype) IN ('REJECT','REJECTED')
+                              AND COALESCE(activeflag, TRUE) = TRUE
+                        ) AS rejecteduserids
+                    FROM memberactivityworkgroupaction
+                    GROUP BY memberactivityworkgroupid
+                ) rj
+                  ON rj.memberactivityworkgroupid = maw.memberactivityworkgroupid
+                WHERE COALESCE(cug.activeflag, TRUE) = TRUE
+                  AND COALESCE(maw.activeflag, TRUE) = TRUE
+                  -- AND (@userId IS NULL OR cug.userid = @userId)
+                  AND ma.referto IS NULL
+                  AND ma.isworkbasket = TRUE
+                  AND ma.deletedon IS NULL
+                  AND COALESCE(ma.activeflag, TRUE) = TRUE
+            )
+
+            UNION ALL
+
+            (
+                -- =========================
+                -- UM (AUTH pending in WG/WB pool)
+                -- =========================
+                SELECT distinct
+                    'UM' AS module,
+                    md.firstname,
+                    md.lastname,
+                    md.memberid,
+                    md.memberdetailsid,
+                    a.createdon,
+                    NULL::int AS activitytypeid,
+                    NULL::text AS activitytype,
+                    NULL::int  AS referto,
+                    NULL::text AS username,
+                    NULL::timestamp AS followupdatetime,
+                    a.authduedate AS duedate,
+                    a.authstatus  AS statusid,
+                    'Request' AS status,
+                    a.authnumber AS authnumber,
+                    COALESCE(rj.rejectedcount, 0)                    AS rejectedcount,
+                    COALESCE(rj.rejecteduserids, ARRAY[]::integer[]) AS rejecteduserids,
+                    wg.workgroupid                                   AS workgroupid,
+                    wg.workgroupname                                 AS workgroupname,
+                    wb.workbasketid                                  AS workbasketid,
+                    wb.workbasketname                                AS workbasketname,
+                    awg.authworkgroupid                              AS memberactivityworkgroupid
+                FROM cfguserworkgroup cug
+                JOIN cfgworkgroupworkbasket cww
+                    ON cww.workgroupworkbasketid = cug.workgroupworkbasketid
+                JOIN cfgworkgroup wg
+                    ON wg.workgroupid = cww.workgroupid
+                JOIN cfgworkbasket wb
+                    ON wb.workbasketid = cww.workbasketid
+                JOIN authworkgroup awg
+                    ON awg.workgroupworkbasketid = cug.workgroupworkbasketid
+                   AND awg.requesttype = 'AUTH'
+                   AND COALESCE(awg.activeflag, TRUE) = TRUE
+                JOIN authdetail a
+                    ON a.authdetailid = awg.authdetailid
+                JOIN memberdetails md
+                    ON md.memberdetailsid = a.memberdetailsid
+                LEFT JOIN (
+                    SELECT
+                        authworkgroupid,
+                        COUNT(*) FILTER (
+                            WHERE upper(actiontype) IN ('REJECT','REJECTED')
+                              AND COALESCE(activeflag, TRUE) = TRUE
+                        ) AS rejectedcount,
+                        ARRAY_AGG(userid) FILTER (
+                            WHERE upper(actiontype) IN ('REJECT','REJECTED')
+                              AND COALESCE(activeflag, TRUE) = TRUE
+                        ) AS rejecteduserids
+                    FROM authworkgroupaction
+                    GROUP BY authworkgroupid
+                ) rj
+                  ON rj.authworkgroupid = awg.authworkgroupid
+                WHERE COALESCE(cug.activeflag, TRUE) = TRUE
+                  -- AND (@userId IS NULL OR cug.userid = @userId)
+                  AND a.deletedon IS NULL
+                  AND a.authassignedto IS NULL                -- still in pool
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM authworkgroupaction awa
+                      WHERE awa.authworkgroupid = awg.authworkgroupid
+                        AND COALESCE(awa.activeflag, TRUE) = TRUE
+                        AND upper(awa.actiontype) IN ('ACCEPT','ACCEPTED')
+                      LIMIT 1
+                  )
+            )
+
+            UNION ALL
+
+            (
+                -- =========================
+                -- AG (CASE pending in WG/WB pool)
+                -- =========================
+                -- NOTE: caseheader/memberdetails join columns aren’t in the provided tables snippet,
+                -- so this assumes caseheader has memberdetailsid. If not, keep md.* as NULL.
+                SELECT distinct
+                    'AG' AS module,
+                    md.firstname,
+                    md.lastname,
+                    md.memberid,
+                    md.memberdetailsid,
+                    cd.createdon,
+                    NULL::int AS activitytypeid,
+                    NULL::text AS activitytype,
+                    NULL::int  AS referto,
+                    NULL::text AS username,
+                    NULL::timestamp AS followupdatetime,
+                    NULL::timestamp AS duedate,
+                    NULL::int AS statusid,
+                    'Request' AS status,
+                    ch.casenumber AS authnumber,
+                    COALESCE(rj.rejectedcount, 0)                    AS rejectedcount,
+                    COALESCE(rj.rejecteduserids, ARRAY[]::integer[]) AS rejecteduserids,
+                    wg.workgroupid                                   AS workgroupid,
+                    wg.workgroupname                                 AS workgroupname,
+                    wb.workbasketid                                  AS workbasketid,
+                    wb.workbasketname                                AS workbasketname,
+                    cw.caseworkgroupid                               AS memberactivityworkgroupid
+                FROM cfguserworkgroup cug
+                JOIN cfgworkgroupworkbasket cww
+                    ON cww.workgroupworkbasketid = cug.workgroupworkbasketid
+                JOIN cfgworkgroup wg
+                    ON wg.workgroupid = cww.workgroupid
+                JOIN cfgworkbasket wb
+                    ON wb.workbasketid = cww.workbasketid
+                JOIN caseworkgroup cw
+                    ON cw.workgroupworkbasketid = cug.workgroupworkbasketid
+                   AND cw.requesttype = 'CASE'
+                   AND COALESCE(cw.activeflag, TRUE) = TRUE
+                LEFT JOIN casedetail cd
+                    ON cd.caseheaderid = cw.caseheaderid
+                   AND cd.caselevelid  = cw.caselevelid
+                   AND cd.deletedon IS NULL
+                LEFT JOIN caseheader ch
+                    ON ch.caseheaderid = cw.caseheaderid
+                LEFT JOIN memberdetails md
+                    ON md.memberdetailsid = ch.memberdetailid
+                LEFT JOIN (
+                    SELECT
+                        caseworkgroupid,
+                        COUNT(*) FILTER (
+                            WHERE upper(actiontype) IN ('REJECT','REJECTED')
+                              AND COALESCE(activeflag, TRUE) = TRUE
+                        ) AS rejectedcount,
+                        ARRAY_AGG(userid) FILTER (
+                            WHERE upper(actiontype) IN ('REJECT','REJECTED')
+                              AND COALESCE(activeflag, TRUE) = TRUE
+                        ) AS rejecteduserids
+                    FROM caseworkgroupaction
+                    GROUP BY caseworkgroupid
+                ) rj
+                  ON rj.caseworkgroupid = cw.caseworkgroupid
+                WHERE COALESCE(cug.activeflag, TRUE) = TRUE
+                  -- AND (@userId IS NULL OR cug.userid = @userId)
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM caseworkgroupaction cwa
+                      WHERE cwa.caseworkgroupid = cw.caseworkgroupid
+                        AND COALESCE(cwa.activeflag, TRUE) = TRUE
+                        AND upper(cwa.actiontype) IN ('ACCEPT','ACCEPTED')
+                      LIMIT 1
+                  )
+            )
+
+            ORDER BY createdon DESC;";
             //cug.userid = @userId   AND
             var results = new List<ActivityRequestItem>();
 

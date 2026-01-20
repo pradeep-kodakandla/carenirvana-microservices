@@ -121,6 +121,8 @@ public class CaseController : ControllerBase
         return NoContent();
     }
 
+
+
     [HttpGet("ByMember/{memberDetailId:long}")]
     public async Task<IActionResult> GetCasesByMemberDetailId(
         long memberDetailId,
@@ -148,6 +150,30 @@ public class CaseController : ControllerBase
     {
         var cases = await _caseRepository.GetAgCasesByMemberAsync(memberDetailId, ct);
         return Ok(cases);
+    }
+
+    [HttpPost("workgroup/acceptreject")]
+    public async Task<IActionResult> AcceptRejectCaseWorkgroup(
+        [FromQuery] long caseWorkgroupId,
+        [FromQuery] string actionType,      // "ACCEPT" or "REJECT"
+        [FromQuery] int userId,
+        [FromQuery] int completedStatusId,   // required when ACCEPT
+        [FromBody] string? comment = null)
+    {
+        if (caseWorkgroupId <= 0)
+            return BadRequest(new { message = "Invalid CaseWorkgroupId." });
+        if (actionType != "ACCEPT" && actionType != "REJECT")
+            return BadRequest(new { message = "Invalid ActionType. Must be 'ACCEPT' or 'REJECT'." });
+        if (actionType == "ACCEPT" && completedStatusId <= 0)
+            return BadRequest(new { message = "CompletedStatusId is required when ActionType is 'ACCEPT'." });
+        await _caseRepository.AcceptRejectCaseWorkgroupAsync(
+            caseWorkgroupId,
+            actionType,
+            comment,
+            userId,
+            completedStatusId
+        );
+        return NoContent();
     }
 }
 

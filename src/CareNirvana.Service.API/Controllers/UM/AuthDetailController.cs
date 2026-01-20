@@ -266,5 +266,38 @@ namespace CareNirvana.Service.Api.Controllers
             var ok = await _authRepo.SoftDeleteDecisionSectionItemAsync(authDetailId, sectionName, itemId, userId, ct);
             return ok ? NoContent() : NotFound();
         }
+
+        [HttpPost("workgroup/{authWorkgroupId:long}/action")]
+        public async Task<IActionResult> AcceptRejectAuthWorkgroup(
+            long authWorkgroupId,
+            [FromQuery] string actionType,
+            [FromQuery] string? comment,
+            [FromQuery] int userId,
+            [FromQuery] int completedStatusId)
+        {
+            if (authWorkgroupId <= 0) return BadRequest("authWorkgroupId is required.");
+            if (userId <= 0) return BadRequest("userId is required.");
+
+            actionType = (actionType ?? "").Trim().ToUpperInvariant();
+            if (actionType != "ACCEPT" && actionType != "REJECT")
+                return BadRequest("actionType must be ACCEPT or REJECT.");
+
+            if (actionType == "ACCEPT" && completedStatusId <= 0)
+                return BadRequest("completedStatusId is required for ACCEPT.");
+
+            try
+            {
+                await _authRepo.AcceptRejectAuthWorkgroupAsync(
+                    authWorkgroupId, actionType, comment, userId, completedStatusId);
+
+                return NoContent();
+            }
+            catch (InvalidOperationException ex)
+            {
+                // e.g., not found / already accepted (depends on your repo messages)
+                return Conflict(ex.Message);
+            }
+        }
+
     }
 }

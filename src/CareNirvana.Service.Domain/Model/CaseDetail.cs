@@ -48,6 +48,11 @@ namespace CareNirvana.Service.Domain.Model
 
         public DateTime? DeletedOn { get; set; }
         public long? DeletedBy { get; set; }
+
+        public bool IsWorkgroupAssigned { get; set; }
+        public bool IsWorkgroupPending { get; set; }
+        public int[]? AssignedWorkgroupWorkbasketIds { get; set; }
+
     }
 
     public class CaseAggregate
@@ -65,6 +70,12 @@ namespace CareNirvana.Service.Domain.Model
         public long? MemberDetailId { get; set; }
         public long LevelId { get; set; }      // Level 1 id comes in input
         public string JsonData { get; set; } = "{}";
+
+        // Workgroup assignment (optional)
+        public int? WorkgroupWorkbasketId { get; set; }                 // single (backward compatible)
+        public List<int>? WorkgroupWorkbasketIds { get; set; }          // multi
+        public int? GroupStatusId { get; set; }
+
     }
 
     public class AddCaseLevelRequest
@@ -72,6 +83,12 @@ namespace CareNirvana.Service.Domain.Model
         public long CaseHeaderId { get; set; } // you said use caseheaderid reference
         public long LevelId { get; set; }      // level id comes in input
         public string JsonData { get; set; } = "{}";
+
+        // Workgroup assignment (optional)
+        public int? WorkgroupWorkbasketId { get; set; }                 // single (backward compatible)
+        public List<int>? WorkgroupWorkbasketIds { get; set; }          // multi
+        public int? GroupStatusId { get; set; }
+
     }
 
     public class UpdateCaseDetailRequest
@@ -79,6 +96,12 @@ namespace CareNirvana.Service.Domain.Model
         public long CaseDetailId { get; set; }
         public string JsonData { get; set; } = "{}";
         public long? LevelId { get; set; }     // optional to change level id
+
+        // Workgroup assignment (optional)
+        public int? WorkgroupWorkbasketId { get; set; }                 // single (backward compatible)
+        public List<int>? WorkgroupWorkbasketIds { get; set; }          // multi
+        public int? GroupStatusId { get; set; }
+
     }
 
     public class CreateCaseResult

@@ -4,6 +4,7 @@ using Dapper;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using System.Data;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -53,8 +54,31 @@ namespace CareNirvana.Service.Infrastructure.Repository
                        d.updatedon       as UpdatedOn,
                        d.updatedby       as UpdatedBy,
                        d.deletedon       as DeletedOn,
-                       d.deletedby       as DeletedBy
+                       d.deletedby       as DeletedBy,
+                       coalesce(wg.is_assigned, false) as IsWorkgroupAssigned,
+                       (coalesce(wg.is_assigned, false) = true and coalesce(wg.any_accept, false) = false) as IsWorkgroupPending,
+                       wg.wgwb_ids as AssignedWorkgroupWorkbasketIds
                 from casedetail d
+                left join lateral (
+                    select
+                        (count(*) > 0) as is_assigned,
+                        array_remove(array_agg(cw.workgroupworkbasketid order by cw.createdon desc), null) as wgwb_ids,
+                        bool_or(
+                            exists (
+                                select 1
+                                from caseworkgroupaction cwa
+                                where cwa.caseworkgroupid = cw.caseworkgroupid
+                                  and coalesce(cwa.activeflag, true) = true
+                                  and upper(cwa.actiontype) in ('ACCEPT','ACCEPTED')
+                                limit 1
+                            )
+                        ) as any_accept
+                    from caseworkgroup cw
+                    where cw.caseheaderid = d.caseheaderid
+                      and cw.caselevelid  = d.caselevelid
+                      and cw.requesttype  = 'CASE'
+                      and coalesce(cw.activeflag, true) = true
+                ) wg on true
                 join caseheader h on h.caseheaderid = d.caseheaderid
                 where h.casenumber = @caseNumber
                   and (@includeDeleted = true or d.deletedon is null)
@@ -108,8 +132,31 @@ namespace CareNirvana.Service.Infrastructure.Repository
                        d.updatedon       as UpdatedOn,
                        d.updatedby       as UpdatedBy,
                        d.deletedon       as DeletedOn,
-                       d.deletedby       as DeletedBy
+                       d.deletedby       as DeletedBy,
+                       coalesce(wg.is_assigned, false) as IsWorkgroupAssigned,
+                       (coalesce(wg.is_assigned, false) = true and coalesce(wg.any_accept, false) = false) as IsWorkgroupPending,
+                       wg.wgwb_ids as AssignedWorkgroupWorkbasketIds
                 from casedetail d
+                left join lateral (
+                    select
+                        (count(*) > 0) as is_assigned,
+                        array_remove(array_agg(cw.workgroupworkbasketid order by cw.createdon desc), null) as wgwb_ids,
+                        bool_or(
+                            exists (
+                                select 1
+                                from caseworkgroupaction cwa
+                                where cwa.caseworkgroupid = cw.caseworkgroupid
+                                  and coalesce(cwa.activeflag, true) = true
+                                  and upper(cwa.actiontype) in ('ACCEPT','ACCEPTED')
+                                limit 1
+                            )
+                        ) as any_accept
+                    from caseworkgroup cw
+                    where cw.caseheaderid = d.caseheaderid
+                      and cw.caselevelid  = d.caselevelid
+                      and cw.requesttype  = 'CASE'
+                      and coalesce(cw.activeflag, true) = true
+                ) wg on true
                 where d.caseheaderid = @caseHeaderId
                   and (@includeDeleted = true or d.deletedon is null)
                 order by d.caselevelid;";
@@ -176,8 +223,31 @@ namespace CareNirvana.Service.Infrastructure.Repository
                        d.updatedon       as UpdatedOn,
                        d.updatedby       as UpdatedBy,
                        d.deletedon       as DeletedOn,
-                       d.deletedby       as DeletedBy
+                       d.deletedby       as DeletedBy,
+                       coalesce(wg.is_assigned, false) as IsWorkgroupAssigned,
+                       (coalesce(wg.is_assigned, false) = true and coalesce(wg.any_accept, false) = false) as IsWorkgroupPending,
+                       wg.wgwb_ids as AssignedWorkgroupWorkbasketIds
                 from casedetail d
+                left join lateral (
+                    select
+                        (count(*) > 0) as is_assigned,
+                        array_remove(array_agg(cw.workgroupworkbasketid order by cw.createdon desc), null) as wgwb_ids,
+                        bool_or(
+                            exists (
+                                select 1
+                                from caseworkgroupaction cwa
+                                where cwa.caseworkgroupid = cw.caseworkgroupid
+                                  and coalesce(cwa.activeflag, true) = true
+                                  and upper(cwa.actiontype) in ('ACCEPT','ACCEPTED')
+                                limit 1
+                            )
+                        ) as any_accept
+                    from caseworkgroup cw
+                    where cw.caseheaderid = d.caseheaderid
+                      and cw.caselevelid  = d.caselevelid
+                      and cw.requesttype  = 'CASE'
+                      and coalesce(cw.activeflag, true) = true
+                ) wg on true
                 where d.caseheaderid = @caseHeaderId
                   and (@includeDeleted = true or d.deletedon is null)
                 order by d.caselevelid;";
@@ -275,6 +345,25 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 },
                 tx);
 
+
+            // Workgroup assignment (optional, backward compatible):
+            // Only apply when client sends WG/WB ids (or single id). Otherwise leave as-is.
+            var wgwbIds = NormalizeWgWbIds(req.WorkgroupWorkbasketIds);
+            if ((wgwbIds.Length == 0) && req.WorkgroupWorkbasketId.HasValue && req.WorkgroupWorkbasketId.Value > 0)
+                wgwbIds = new[] { req.WorkgroupWorkbasketId.Value };
+
+            if (wgwbIds.Length > 0 || req.WorkgroupWorkbasketIds != null || req.WorkgroupWorkbasketId.HasValue)
+            {
+                await SaveCaseWorkgroupsAsync(new SaveCaseWorkgroupsRequest
+                {
+                    RequestType = "CASE",
+                    CaseHeaderId = caseHeaderId,
+                    CaseLevelId = (int)req.LevelId,
+                    WorkgroupWorkbasketIds = wgwbIds,
+                    GroupStatusId = req.GroupStatusId
+                }, (int)userId);
+            }
+
             await tx.CommitAsync();
 
             return new CreateCaseResult
@@ -350,7 +439,41 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 caseLevelId = req.LevelId,
                 userId
             });
+
+
+            // Workgroup assignment (optional): if client sends WG/WB ids, sync caseworkgroup for this level
+            // We derive CaseHeaderId + CaseLevelId from casedetail to avoid needing extra fields on the request.
+            var wgwbIds = NormalizeWgWbIds(req.WorkgroupWorkbasketIds);
+            if ((wgwbIds.Length == 0) && req.WorkgroupWorkbasketId.HasValue && req.WorkgroupWorkbasketId.Value > 0)
+                wgwbIds = new[] { req.WorkgroupWorkbasketId.Value };
+
+            if (wgwbIds.Length > 0 || req.WorkgroupWorkbasketIds != null || req.WorkgroupWorkbasketId.HasValue)
+            {
+                const string scopeSql = @"
+        select caseheaderid as CaseHeaderId, caselevelid as CaseLevelId
+        from casedetail
+        where casedetailid = @caseDetailId
+          and deletedon is null;";
+
+                var scope = await conn.QueryFirstOrDefaultAsync(scopeSql, new { caseDetailId = req.CaseDetailId });
+                if (scope != null)
+                {
+                    int caseLevelId = (int)scope.caselevelid;
+                    // If caller changed levelId in the same request, prefer the new one
+                    if (req.LevelId.HasValue && req.LevelId.Value > 0) caseLevelId = (int)req.LevelId.Value;
+
+                    await SaveCaseWorkgroupsAsync(new SaveCaseWorkgroupsRequest
+                    {
+                        RequestType = "CASE",
+                        CaseHeaderId = (long)scope.caseheaderid,
+                        CaseLevelId = caseLevelId,
+                        WorkgroupWorkbasketIds = wgwbIds,
+                        GroupStatusId = req.GroupStatusId
+                    }, (int)userId);
+                }
+            }
         }
+
 
         public async Task SoftDeleteCaseHeaderAsync(long caseHeaderId, long userId, bool cascadeDetails = true)
         {
@@ -429,7 +552,11 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                   (cd.jsondata::jsonb ->> 'Case_Status_Details_caseStatus') AS ""CaseStatusId"",
                                   COALESCE(cs.casestatus_name,
                                            (cd.jsondata::jsonb ->> 'Case_Status_Details_caseStatus')) AS ""CaseStatusText"",
-                                  COALESCE(cd.updatedon, cd.createdon)            AS ""LastDetailOn""
+                                  COALESCE(cd.updatedon, cd.createdon)            AS ""LastDetailOn"",
+                                    COALESCE(wg.is_assigned, false) AS ""IsWorkgroupAssigned"",
+                                    (COALESCE(wg.is_assigned, false) = true AND COALESCE(wg.any_accept, false) = false) AS ""IsWorkgroupPending"",
+                                    wg.wgwb_ids AS ""AssignedWorkgroupWorkbasketIds""
+
                                 FROM caseheader ch
                                 JOIN LATERAL (
                                   SELECT d.*
@@ -445,6 +572,27 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                 JOIN cfgcasetemplate cct ON cct.casetemplateid = ch.casetype::int
                                 LEFT JOIN casestatus_lu  cs ON cs.id = (cd.jsondata::jsonb ->> 'Case_Status_Details_caseStatus')
                                 LEFT JOIN casepriority_lu cp ON cp.id = (cd.jsondata::jsonb ->> 'Case_Overview_casePriority')
+                                LEFT JOIN LATERAL (
+                                  SELECT
+                                      (COUNT(*) > 0) AS is_assigned,
+                                      array_remove(array_agg(cw.workgroupworkbasketid ORDER BY cw.createdon DESC), null) AS wgwb_ids,
+                                      bool_or(
+                                          EXISTS (
+                                              SELECT 1
+                                              FROM caseworkgroupaction cwa
+                                              WHERE cwa.caseworkgroupid = cw.caseworkgroupid
+                                                AND COALESCE(cwa.activeflag, TRUE) = TRUE
+                                                AND upper(cwa.actiontype) IN ('ACCEPT','ACCEPTED')
+                                              LIMIT 1
+                                          )
+                                      ) AS any_accept
+                                  FROM caseworkgroup cw
+                                  WHERE cw.caseheaderid = ch.caseheaderid
+                                    AND cw.caselevelid  = cd.caselevelid
+                                    AND cw.requesttype  = 'CASE'
+                                    AND COALESCE(cw.activeflag, TRUE) = TRUE
+                                ) wg ON TRUE
+
                                 WHERE ch.memberdetailid = @memberId
                                 ORDER BY COALESCE(cd.updatedon, cd.createdon) DESC NULLS LAST;
                                 ";
@@ -456,6 +604,293 @@ namespace CareNirvana.Service.Infrastructure.Repository
             //var rows = await conn.QueryAsync<AgCaseRow>(cmd);
             return rows.AsList();
         }
+
+        // =========================
+        // Workgroup / Workbasket (CASE + ACTIVITY) logic
+        // Mirrors AuthRepository patterns, but Case domain does not have a direct "assignedto" column in caseheader.
+        // =========================
+
+        public sealed class SaveCaseWorkgroupsRequest
+        {
+            public string RequestType { get; set; } = "CASE"; // CASE | ACTIVITY
+            public long CaseHeaderId { get; set; }
+            public int CaseLevelId { get; set; }
+            public long? CaseActivityId { get; set; }         // required when RequestType=ACTIVITY
+
+            // Multi-select WG/WB mapping ids (cfgworkgroupworkbasket.workgroupworkbasketid)
+            public int[] WorkgroupWorkbasketIds { get; set; } = Array.Empty<int>();
+
+            // Optional: set on insert
+            public int? GroupStatusId { get; set; }
+        }
+
+        private static int[] NormalizeWgWbIds(IEnumerable<int>? ids)
+            => (ids ?? Array.Empty<int>()).Where(x => x > 0).Distinct().ToArray();
+
+        /// <summary>
+        /// Upserts caseworkgroup rows for a CASE or ACTIVITY scope.
+        /// - Deactivates removed WG/WB ids for the same scope
+        /// - Reactivates existing selected ids
+        /// - Inserts missing selected ids
+        /// </summary>
+        public async Task SaveCaseWorkgroupsAsync(SaveCaseWorkgroupsRequest req, int userId)
+        {
+            var requestType = (req.RequestType ?? "CASE").Trim().ToUpperInvariant();
+            if (requestType != "CASE" && requestType != "ACTIVITY")
+                throw new ArgumentException("RequestType must be CASE or ACTIVITY.");
+
+            if (req.CaseHeaderId <= 0) throw new ArgumentException("CaseHeaderId is required.");
+            if (req.CaseLevelId <= 0) throw new ArgumentException("CaseLevelId is required.");
+
+            if (requestType == "ACTIVITY" && (!req.CaseActivityId.HasValue || req.CaseActivityId.Value <= 0))
+                throw new ArgumentException("CaseActivityId is required when RequestType is ACTIVITY.");
+
+            var ids = NormalizeWgWbIds(req.WorkgroupWorkbasketIds);
+
+            await using var conn = CreateConn();
+            await conn.OpenAsync();
+            await using var tx = await conn.BeginTransactionAsync(IsolationLevel.ReadCommitted);
+
+            // Deactivate rows NOT in selection (same scope)
+            const string deactivateSql = @"
+        update caseworkgroup
+        set activeflag = false,
+            updatedon = now(),
+            updatedby = @userId
+        where caseheaderid = @caseHeaderId
+          and caselevelid  = @caseLevelId
+          and requesttype  = @requestType
+          and activeflag   = true
+          and (
+                (@requestType = 'CASE' and caseactivityid is null)
+             or (@requestType = 'ACTIVITY' and caseactivityid = @caseActivityId)
+          )
+          and (
+                @idsLen = 0
+                or workgroupworkbasketid <> all(@ids)
+          );";
+
+            await conn.ExecuteAsync(deactivateSql, new
+            {
+                caseHeaderId = req.CaseHeaderId,
+                caseLevelId = req.CaseLevelId,
+                requestType,
+                caseActivityId = req.CaseActivityId,
+                ids,
+                idsLen = ids.Length,
+                userId
+            }, tx);
+
+            if (ids.Length == 0)
+            {
+                await tx.CommitAsync();
+                return;
+            }
+
+            // Reactivate existing selected ids
+            const string activateSql = @"
+        update caseworkgroup
+        set activeflag = true,
+            updatedon = now(),
+            updatedby = @userId
+        where caseheaderid = @caseHeaderId
+          and caselevelid  = @caseLevelId
+          and requesttype  = @requestType
+          and (
+                (@requestType = 'CASE' and caseactivityid is null)
+             or (@requestType = 'ACTIVITY' and caseactivityid = @caseActivityId)
+          )
+          and workgroupworkbasketid = any(@ids);";
+
+            await conn.ExecuteAsync(activateSql, new
+            {
+                caseHeaderId = req.CaseHeaderId,
+                caseLevelId = req.CaseLevelId,
+                requestType,
+                caseActivityId = req.CaseActivityId,
+                ids,
+                userId
+            }, tx);
+
+            // Insert missing ids
+            const string insertSql = @"
+        insert into caseworkgroup
+            (requesttype, caseheaderid, caseactivityid, caselevelid, workgroupworkbasketid, groupstatusid,
+             activeflag, createdon, createdby)
+        select
+            @requestType,
+            @caseHeaderId,
+            case when @requestType = 'CASE' then null else @caseActivityId end,
+            @caseLevelId,
+            v,
+            @groupStatusId,
+            true,
+            now(),
+            @userId
+        from unnest(@ids) as v
+        where not exists (
+            select 1
+            from caseworkgroup cw
+            where cw.caseheaderid = @caseHeaderId
+              and cw.caselevelid  = @caseLevelId
+              and cw.requesttype  = @requestType
+              and (
+                    (@requestType = 'CASE' and cw.caseactivityid is null)
+                 or (@requestType = 'ACTIVITY' and cw.caseactivityid = @caseActivityId)
+              )
+              and cw.workgroupworkbasketid = v
+        );";
+
+            await conn.ExecuteAsync(insertSql, new
+            {
+                requestType,
+                caseHeaderId = req.CaseHeaderId,
+                caseLevelId = req.CaseLevelId,
+                caseActivityId = req.CaseActivityId,
+                ids,
+                groupStatusId = req.GroupStatusId,
+                userId
+            }, tx);
+
+            await tx.CommitAsync();
+        }
+
+        /// <summary>
+        /// Accept/Reject a specific caseworkgroup row. Works for requesttype CASE and ACTIVITY.
+        /// - REJECT: upsert action row for this user only
+        /// - ACCEPT: upsert action row, mark caseworkgroup completed, and deactivate other active rows in same scope
+        /// </summary>
+        public async Task AcceptRejectCaseWorkgroupAsync(
+            long caseWorkgroupId,
+            string actionType,      // "ACCEPT" or "REJECT"
+            string? comment,
+            int userId,
+            int completedStatusId   // required when ACCEPT
+        )
+        {
+            actionType = (actionType ?? "").Trim().ToUpperInvariant();
+            if (actionType != "ACCEPT" && actionType != "REJECT")
+                throw new ArgumentException("actionType must be ACCEPT or REJECT");
+
+            if (caseWorkgroupId <= 0) throw new ArgumentException("caseWorkgroupId is required");
+            if (userId <= 0) throw new ArgumentException("userId is required");
+            if (actionType == "ACCEPT" && completedStatusId <= 0)
+                throw new ArgumentException("completedStatusId is required for ACCEPT");
+
+            await using var conn = CreateConn();
+            await conn.OpenAsync();
+            await using var tx = await conn.BeginTransactionAsync(IsolationLevel.ReadCommitted);
+
+            // Lock row + load scope fields
+            const string getWgSql = @"
+        select
+            caseworkgroupid as CaseWorkgroupId,
+            requesttype     as RequestType,
+            caseheaderid    as CaseHeaderId,
+            caseactivityid  as CaseActivityId,
+            caselevelid     as CaseLevelId
+        from caseworkgroup
+        where caseworkgroupid = @caseWorkgroupId
+          and activeflag = true
+        for update;";
+
+            var wg = await conn.QueryFirstOrDefaultAsync(getWgSql, new { caseWorkgroupId }, tx);
+            if (wg == null)
+                throw new InvalidOperationException("Case workgroup assignment not found or inactive.");
+
+            var requestType = ((string)wg.requesttype).Trim().ToUpperInvariant();
+            var caseHeaderId = (int)wg.caseheaderid;
+            var caseLevelId = (int)wg.caselevelid;
+            int? caseActivityId = wg.caseactivityid == null ? (int?)null : (int)wg.caseactivityid;
+
+            if (requestType == "CASE" && caseActivityId != null)
+                throw new InvalidOperationException("Invalid CASE workgroup row: caseactivityid must be NULL.");
+            if (requestType == "ACTIVITY" && caseActivityId == null)
+                throw new InvalidOperationException("Invalid ACTIVITY workgroup row: caseactivityid is required.");
+
+            if (actionType == "ACCEPT")
+            {
+                const string alreadyAcceptedSql = @"
+            select 1
+            from caseworkgroupaction
+            where caseworkgroupid = @caseWorkgroupId
+              and activeflag = true
+              and upper(actiontype) in ('ACCEPT','ACCEPTED')
+            limit 1;";
+
+                var already = await conn.ExecuteScalarAsync<int?>(alreadyAcceptedSql, new { caseWorkgroupId }, tx);
+                if (already.HasValue)
+                    throw new InvalidOperationException("This workgroup assignment is already accepted.");
+            }
+
+            // Upsert action row for this user (caselevelid required)
+            const string upsertActionSql = @"
+        insert into caseworkgroupaction
+            (caseworkgroupid, userid, caselevelid, actiontype, actionon, comment, activeflag, createdon, createdby)
+        values
+            (@caseWorkgroupId, @userId, @caseLevelId, @actionType, now(), @comment, true, now(), @userId)
+        on conflict (caseworkgroupid, userid)
+        do update set
+            caselevelid = excluded.caselevelid,
+            actiontype  = excluded.actiontype,
+            actionon    = now(),
+            comment     = excluded.comment,
+            activeflag  = true,
+            updatedon   = now(),
+            updatedby   = @userId;";
+
+            await conn.ExecuteAsync(upsertActionSql, new
+            {
+                caseWorkgroupId,
+                userId,
+                caseLevelId,
+                actionType,
+                comment
+            }, tx);
+
+            if (actionType == "REJECT")
+            {
+                await tx.CommitAsync();
+                return;
+            }
+
+            const string completeSql = @"
+        update caseworkgroup
+        set groupstatusid = @completedStatusId,
+            updatedon = now(),
+            updatedby = @userId
+        where caseworkgroupid = @caseWorkgroupId;";
+
+            await conn.ExecuteAsync(completeSql, new { caseWorkgroupId, completedStatusId, userId }, tx);
+
+            const string deactivateOthersSql = @"
+        update caseworkgroup
+        set activeflag = false,
+            updatedon = now(),
+            updatedby = @userId
+        where caseheaderid = @caseHeaderId
+          and caselevelid  = @caseLevelId
+          and requesttype  = @requestType
+          and activeflag   = true
+          and (
+                (@requestType = 'CASE' and caseactivityid is null)
+             or (@requestType = 'ACTIVITY' and caseactivityid = @caseActivityId)
+          )
+          and caseworkgroupid <> @caseWorkgroupId;";
+
+            await conn.ExecuteAsync(deactivateOthersSql, new
+            {
+                caseHeaderId,
+                caseLevelId,
+                requestType,
+                caseActivityId,
+                caseWorkgroupId,
+                userId
+            }, tx);
+
+            await tx.CommitAsync();
+        }
+
     }
 
     // ICaseNotesRepository methods would go here************/

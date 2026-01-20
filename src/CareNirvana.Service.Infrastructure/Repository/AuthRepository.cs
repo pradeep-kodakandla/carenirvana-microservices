@@ -55,7 +55,11 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     md.memberid as MemberId,
                     (coalesce(md.firstname,'') ||
                       case when md.lastname is null or md.lastname = '' then '' else ' ' || md.lastname end
-                    ) as MemberName
+                    ) as MemberName,
+                    coalesce(wg.is_assigned, false) as IsWorkgroupAssigned,
+                    (coalesce(wg.is_assigned, false) = true and coalesce(wg.any_accept, false) = false) as IsWorkgroupPending
+
+
                 from authdetail a
                 left join cfgauthtemplate at on at.authtemplateid = a.authtypeid
                 left join securityuser su on su.userid = a.createdby
@@ -63,6 +67,25 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 left join auth_status st
                        on st.AuthStatusId = a.authstatus
                       and st.ActiveFlag = true
+               left join lateral (
+                    select
+                        (count(*) > 0) as is_assigned,
+                        array_remove(array_agg(awg.workgroupworkbasketid order by awg.createdon desc), null) as wgwb_ids,
+                        bool_or(
+                            exists (
+                                select 1
+                                from authworkgroupaction awa
+                                where awa.authworkgroupid = awg.authworkgroupid
+                                  and awa.activeflag = true
+                                  and upper(awa.actiontype) = 'ACCEPT'
+                            )
+                        ) as any_accept
+                    from authworkgroup awg
+                    where awg.authdetailid = a.authdetailid
+                      and awg.requesttype = 'AUTH'
+                      and awg.activeflag = true
+                ) wg on true
+
                 where a.authnumber = @authNumber
                   and (@includeDeleted = true or a.deletedon is null)
                 order by a.createdon desc;";
@@ -107,7 +130,10 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     md.memberid as MemberId,
                     (coalesce(md.firstname,'') ||
                       case when md.lastname is null or md.lastname = '' then '' else ' ' || md.lastname end
-                    ) as MemberName
+                    ) as MemberName,
+                    coalesce(wg.is_assigned, false) as IsWorkgroupAssigned,
+                    (coalesce(wg.is_assigned, false) = true and coalesce(wg.any_accept, false) = false) as IsWorkgroupPending
+
                 from authdetail a
                 left join cfgauthtemplate at on at.authtemplateid = a.authtypeid
                 left join securityuser su on su.userid = a.createdby
@@ -115,6 +141,26 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 left join auth_status st
                        on st.AuthStatusId = a.authstatus
                       and st.ActiveFlag = true
+               left join lateral (
+                    select
+                        (count(*) > 0) as is_assigned,
+                        array_remove(array_agg(awg.workgroupworkbasketid order by awg.createdon desc), null) as wgwb_ids,
+                        bool_or(
+                            exists (
+                                select 1
+                                from authworkgroupaction awa
+                                where awa.authworkgroupid = awg.authworkgroupid
+                                  and awa.activeflag = true
+                                  and upper(awa.actiontype) = 'ACCEPT'
+                            )
+                        ) as any_accept
+                    from authworkgroup awg
+                    where awg.authdetailid = a.authdetailid
+                      and awg.requesttype = 'AUTH'
+                      and awg.activeflag = true
+                ) wg on true      
+
+
                 where a.authdetailid = @authDetailId
                   and (@includeDeleted = true or a.deletedon is null)
                 order by a.createdon desc;";
@@ -160,7 +206,10 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     md.memberid as MemberId,
                     (coalesce(md.firstname,'') ||
                       case when md.lastname is null or md.lastname = '' then '' else ' ' || md.lastname end
-                    ) as MemberName
+                    ) as MemberName,
+                    coalesce(wg.is_assigned, false) as IsWorkgroupAssigned,
+                    (coalesce(wg.is_assigned, false) = true and coalesce(wg.any_accept, false) = false) as IsWorkgroupPending
+
                 from authdetail a
                 left join cfgauthtemplate at on at.authtemplateid = a.authtypeid
                 left join securityuser su on su.userid = a.createdby
@@ -168,6 +217,25 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 left join auth_status st
                        on st.AuthStatusId = a.authstatus
                       and st.ActiveFlag = true
+               left join lateral (
+                    select
+                        (count(*) > 0) as is_assigned,
+                        array_remove(array_agg(awg.workgroupworkbasketid order by awg.createdon desc), null) as wgwb_ids,
+                        bool_or(
+                            exists (
+                                select 1
+                                from authworkgroupaction awa
+                                where awa.authworkgroupid = awg.authworkgroupid
+                                  and awa.activeflag = true
+                                  and upper(awa.actiontype) = 'ACCEPT'
+                            )
+                        ) as any_accept
+                    from authworkgroup awg
+                    where awg.authdetailid = a.authdetailid
+                      and awg.requesttype = 'AUTH'
+                      and awg.activeflag = true
+                ) wg on true
+
                 where a.memberdetailsid = @memberDetailsId
                   and (@includeDeleted = true or a.deletedon is null)
                 order by a.createdon desc;";
@@ -180,17 +248,28 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
         public async Task<long> CreateAuthAsync(CreateAuthRequest req, int userId)
         {
+            var requestType = (req.RequestType ?? "AUTH").Trim().ToUpperInvariant();
+            var ids = NormalizeWgWbIds(req.WorkgroupWorkbasketIds, req.WorkgroupWorkbasketId);
+            var hasWgWb = ids.Length > 0;
+
+            // AUTH rule: selected WG/WB => assignedto NULL, else assignedto createdby
+            int? authAssignedTo;
+            if (requestType == "AUTH")
+                authAssignedTo = hasWgWb ? (int?)null : userId;
+            else
+                authAssignedTo = req.AuthAssignedTo; // don’t force for ACTIVITY here
+
             const string sql = @"
-                insert into authdetail
-                    (authnumber, authtypeid, memberdetailsid, authduedate, nextreviewdate, treatementtype,
-                     data, createdon, createdby, authclassid, authassignedto, authstatus)
-                values
-                    (@authNumber, @authTypeId, @memberDetailsId, @authDueDate, @nextReviewDate, @treatementType,
-                     @jsonData::jsonb, now(), @userId, @authClassId, @authAssignedTo, @authStatus)
-                returning authdetailid;";
+        insert into authdetail
+            (authnumber, authtypeid, memberdetailsid, authduedate, nextreviewdate, treatementtype,
+             data, createdon, createdby, authclassid, authassignedto, authstatus)
+        values
+            (@authNumber, @authTypeId, @memberDetailsId, @authDueDate, @nextReviewDate, @treatementType,
+             @jsonData::jsonb, now(), @userId, @authClassId, @authAssignedTo, @authStatus)
+        returning authdetailid;";
 
             await using var conn = CreateConn();
-            var id = await conn.ExecuteScalarAsync<long>(sql, new
+            var authDetailId = await conn.ExecuteScalarAsync<long>(sql, new
             {
                 authNumber = req.AuthNumber,
                 authTypeId = req.AuthTypeId,
@@ -200,31 +279,61 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 treatementType = req.TreatementType,
                 jsonData = req.JsonData,
                 authClassId = req.AuthClassId,
-                authAssignedTo = req.AuthAssignedTo,
+                authAssignedTo,
                 authStatus = req.AuthStatus,
                 userId
             });
 
-            return id;
+            // Persist authworkgroup rows (call even if empty for AUTH if you want central behavior)
+            // Here we call only if ids exist OR if requestType is AUTH (so empty clears/deactivates and sets assignedTo=userId).
+            if (requestType == "AUTH" || hasWgWb)
+            {
+                await SaveAuthWorkgroupsAsync(new SaveAuthWorkgroupsRequest
+                {
+                    RequestType = requestType,
+                    AuthDetailId = authDetailId,
+                    AuthActivityId = req.AuthActivityId,
+                    WorkgroupWorkbasketIds = ids,
+                    GroupStatusId = req.GroupStatusId
+                }, userId);
+            }
+
+            return authDetailId;
         }
+
+
 
         public async Task UpdateAuthAsync(long authDetailId, UpdateAuthRequest req, int userId)
         {
-            // only update provided fields; keep data same if JsonData is null
+            var requestType = (req.RequestType ?? "AUTH").Trim().ToUpperInvariant();
+            var ids = NormalizeWgWbIds(req.WorkgroupWorkbasketIds, req.WorkgroupWorkbasketId);
+            var hasWgWb = ids.Length > 0;
+
+            // AUTH assignment rules
+            var clearAuthAssignedTo = (requestType == "AUTH" && hasWgWb);
+            var setAssignedToCreator = (requestType == "AUTH" && !hasWgWb);
+
             const string sql = @"
-                update authdetail
-                set authtypeid     = coalesce(@authTypeId, authtypeid),
-                    authduedate     = coalesce(@authDueDate, authduedate),
-                    nextreviewdate  = coalesce(@nextReviewDate, nextreviewdate),
-                    treatementtype  = coalesce(@treatementType, treatementtype),
-                    authclassid     = coalesce(@authClassId, authclassid),
-                    authassignedto  = coalesce(@authAssignedTo, authassignedto),
-                    authstatus      = coalesce(@authStatus, authstatus),
-                    data            = case when @jsonData is null then data else @jsonData::jsonb end,
-                    updatedon       = now(),
-                    updatedby       = @userId
-                where authdetailid = @authDetailId
-                  and deletedon is null;";
+        update authdetail
+        set authtypeid     = coalesce(@authTypeId, authtypeid),
+            authduedate     = coalesce(@authDueDate, authduedate),
+            nextreviewdate  = coalesce(@nextReviewDate, nextreviewdate),
+            treatementtype  = coalesce(@treatementType, treatementtype),
+            authclassid     = coalesce(@authClassId, authclassid),
+
+            authassignedto  = case
+                                when @clearAuthAssignedTo = true then null
+                                when @setAssignedToCreator = true then @userId
+                                when @authAssignedTo is null then authassignedto
+                                else @authAssignedTo
+                              end,
+
+            authstatus      = coalesce(@authStatus, authstatus),
+            data            = case when @jsonData is null then data else @jsonData::jsonb end,
+            updatedon       = now(),
+            updatedby       = @userId
+        where authdetailid = @authDetailId
+          and deletedon is null;";
 
             await using var conn = CreateConn();
             await conn.ExecuteAsync(sql, new
@@ -235,12 +344,28 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 nextReviewDate = req.NextReviewDate,
                 treatementType = req.TreatementType,
                 authClassId = req.AuthClassId,
+
                 authAssignedTo = req.AuthAssignedTo,
+                clearAuthAssignedTo,
+                setAssignedToCreator,
+
                 authStatus = req.AuthStatus,
                 jsonData = req.JsonData,
                 userId
             });
+
+            // Keep authworkgroup rows in sync with selection for AUTH and ACTIVITY
+            await SaveAuthWorkgroupsAsync(new SaveAuthWorkgroupsRequest
+            {
+                RequestType = requestType,
+                AuthDetailId = authDetailId,
+                AuthActivityId = req.AuthActivityId,
+                WorkgroupWorkbasketIds = ids,
+                GroupStatusId = req.GroupStatusId
+            }, userId);
         }
+
+
 
         public async Task SoftDeleteAuthAsync(long authDetailId, int userId)
         {
@@ -472,6 +597,314 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
             if (rows == 0) throw new InvalidOperationException("Auth not found or deleted.");
             return rows > 0;
+        }
+
+        public async Task SaveAuthWorkgroupsAsync(SaveAuthWorkgroupsRequest req, int userId)
+        {
+            var requestType = (req.RequestType ?? "AUTH").Trim().ToUpperInvariant();
+            if (requestType != "AUTH" && requestType != "ACTIVITY")
+                throw new ArgumentException("RequestType must be AUTH or ACTIVITY.");
+
+            if (requestType == "ACTIVITY" && (!req.AuthActivityId.HasValue || req.AuthActivityId.Value <= 0))
+                throw new ArgumentException("AuthActivityId is required when RequestType is ACTIVITY.");
+
+            var ids = (req.WorkgroupWorkbasketIds ?? Array.Empty<int>())
+                .Where(x => x > 0)
+                .Distinct()
+                .ToArray();
+
+            await using var conn = CreateConn();
+            await conn.OpenAsync();
+            await using var tx = await conn.BeginTransactionAsync();
+
+            // AUTH rule: keep authassignedto aligned with selection
+            if (requestType == "AUTH")
+            {
+                const string assignSql = @"
+                    update authdetail
+                    set authassignedto =
+                            case when @hasIds = true then null else @userId end,
+                        updatedon = now(),
+                        updatedby = @userId
+                    where authdetailid = @authDetailId
+                      and deletedon is null;";
+
+                await conn.ExecuteAsync(assignSql, new
+                {
+                    authDetailId = req.AuthDetailId,
+                    hasIds = ids.Length > 0,
+                    userId
+                }, tx);
+            }
+
+            // Deactivate rows NOT in selected list (within same scope)
+            const string deactivateSql = @"
+                update authworkgroup
+                set activeflag = false,
+                    updatedon = now(),
+                    updatedby = @userId
+                where authdetailid = @authDetailId
+                  and requesttype = @requestType
+                  and activeflag = true
+                  and (
+                        (@requestType = 'AUTH' and authactivityid is null)
+                     or (@requestType = 'ACTIVITY' and authactivityid = @authActivityId)
+                  )
+                  and (
+                        @idsLen = 0
+                        or workgroupworkbasketid <> all(@ids)
+                  );";
+
+            await conn.ExecuteAsync(deactivateSql, new
+            {
+                authDetailId = req.AuthDetailId,
+                requestType,
+                authActivityId = req.AuthActivityId,
+                ids,
+                idsLen = ids.Length,
+                userId
+            }, tx);
+
+            // If no ids, we're done after deactivation (and AUTH assignment above)
+            if (ids.Length == 0)
+            {
+                await tx.CommitAsync();
+                return;
+            }
+
+            // Reactivate existing rows IN selected list (within same scope)
+            const string activateSql = @"
+                update authworkgroup
+                set activeflag = true,
+                    updatedon = now(),
+                    updatedby = @userId
+                where authdetailid = @authDetailId
+                  and requesttype = @requestType
+                  and (
+                        (@requestType = 'AUTH' and authactivityid is null)
+                     or (@requestType = 'ACTIVITY' and authactivityid = @authActivityId)
+                  )
+                  and workgroupworkbasketid = any(@ids);";
+
+            await conn.ExecuteAsync(activateSql, new
+            {
+                authDetailId = req.AuthDetailId,
+                requestType,
+                authActivityId = req.AuthActivityId,
+                ids,
+                userId
+            }, tx);
+
+            // Insert rows that don't exist yet (within same scope)
+            const string insertSql = @"
+                insert into authworkgroup
+                    (requesttype, authdetailid, authactivityid, workgroupworkbasketid, groupstatusid,
+                     activeflag, createdon, createdby)
+                select
+                    @requestType,
+                    @authDetailId,
+                    case when @requestType = 'AUTH' then null else @authActivityId end,
+                    v,
+                    @groupStatusId,
+                    true,
+                    now(),
+                    @userId
+                from unnest(@ids) as v
+                where not exists (
+                    select 1
+                    from authworkgroup awg
+                    where awg.authdetailid = @authDetailId
+                      and awg.requesttype = @requestType
+                      and (
+                            (@requestType = 'AUTH' and awg.authactivityid is null)
+                         or (@requestType = 'ACTIVITY' and awg.authactivityid = @authActivityId)
+                      )
+                      and awg.workgroupworkbasketid = v
+                );";
+
+            await conn.ExecuteAsync(insertSql, new
+            {
+                requestType,
+                authDetailId = req.AuthDetailId,
+                authActivityId = req.AuthActivityId,
+                ids,
+                groupStatusId = req.GroupStatusId,
+                userId
+            }, tx);
+
+            await tx.CommitAsync();
+        }
+
+
+        public async Task AcceptRejectAuthWorkgroupAsync(
+            long authWorkgroupId,
+            string actionType,          // "ACCEPT" or "REJECT"
+            string? comment,
+            int userId,
+            int completedStatusId       // used only when ACCEPT
+)
+        {
+            actionType = (actionType ?? "").Trim().ToUpperInvariant();
+            if (actionType != "ACCEPT" && actionType != "REJECT")
+                throw new ArgumentException("actionType must be ACCEPT or REJECT");
+
+            await using var conn = CreateConn();
+            await conn.OpenAsync();
+            await using var tx = await conn.BeginTransactionAsync(IsolationLevel.ReadCommitted);
+
+            // Lock target workgroup row
+            const string getWgSql = @"
+                select
+                    authworkgroupid as AuthWorkgroupId,
+                    authdetailid as AuthDetailId,
+                    authactivityid as AuthActivityId,
+                    requesttype as RequestType
+                from authworkgroup
+                where authworkgroupid = @authWorkgroupId
+                  and activeflag = true
+                for update;";
+
+            var wg = await conn.QueryFirstOrDefaultAsync<AuthWorkgroupRow>(
+                getWgSql, new { authWorkgroupId }, tx);
+
+            if (wg == null || wg.AuthWorkgroupId <= 0)
+                throw new InvalidOperationException("Workgroup assignment not found or inactive.");
+
+            var requestType = (wg.RequestType ?? "").Trim().ToUpperInvariant();
+
+            // Enforce your table rule: AUTH must have null activity, ACTIVITY must have non-null activity
+            if (requestType == "AUTH" && wg.AuthActivityId != null)
+                throw new InvalidOperationException("Invalid AUTH workgroup row: authactivityid must be NULL.");
+            if (requestType == "ACTIVITY" && wg.AuthActivityId == null)
+                throw new InvalidOperationException("Invalid ACTIVITY workgroup row: authactivityid is required.");
+
+            // Prevent double-accept on the SAME authworkgroup row
+            if (actionType == "ACCEPT")
+            {
+                const string alreadyAcceptedSql = @"
+                    select 1
+                    from authworkgroupaction
+                    where authworkgroupid = @authWorkgroupId
+                      and activeflag = true
+                      and upper(actiontype) = 'ACCEPT'
+                    limit 1;";
+
+                var alreadyAccepted = await conn.ExecuteScalarAsync<int?>(
+                    alreadyAcceptedSql, new { authWorkgroupId }, tx);
+
+                if (alreadyAccepted.HasValue)
+                    throw new InvalidOperationException("This workgroup assignment is already accepted.");
+            }
+
+            // Insert/upsert action for this user
+            const string upsertActionSql = @"
+                insert into authworkgroupaction
+                    (authworkgroupid, userid, actiontype, actionon, comment, activeflag, createdon, createdby)
+                values
+                    (@authWorkgroupId, @userId, @actionType, now(), @comment, true, now(), @userId)
+                on conflict (authworkgroupid, userid)
+                do update set
+                    actiontype = excluded.actiontype,
+                    actionon   = now(),
+                    comment    = excluded.comment,
+                    updatedon  = now(),
+                    updatedby  = @userId,
+                    activeflag = true;";
+
+            await conn.ExecuteAsync(
+                upsertActionSql,
+                new { authWorkgroupId, userId, actionType, comment },
+                tx);
+
+            // REJECT: nothing else to do
+            if (actionType == "REJECT")
+            {
+                await tx.CommitAsync();
+                return;
+            }
+
+            // ACCEPT: mark completed + assign auth (AUTH only) + deactivate other active rows in same scope
+            const string completeWgSql = @"
+                update authworkgroup
+                set groupstatusid = @completedStatusId,
+                    updatedon = now(),
+                    updatedby = @userId
+                where authworkgroupid = @authWorkgroupId;";
+
+            await conn.ExecuteAsync(
+                completeWgSql,
+                new { authWorkgroupId, completedStatusId, userId },
+                tx);
+
+            // AUTH: assign auth to accepted user
+            if (requestType == "AUTH")
+            {
+                const string assignAuthSql = @"
+                    update authdetail
+                    set authassignedto = @userId,
+                        updatedon = now(),
+                        updatedby = @userId
+                    where authdetailid = @authDetailId
+                      and deletedon is null;";
+
+                await conn.ExecuteAsync(
+                    assignAuthSql,
+                    new { authDetailId = wg.AuthDetailId, userId },
+                    tx);
+
+                // Deactivate all other active AUTH workgroup rows for this authdetail
+                const string deactivateOthersSql = @"
+                    update authworkgroup
+                    set activeflag = false,
+                        updatedon = now(),
+                        updatedby = @userId
+                    where authdetailid = @authDetailId
+                      and requesttype = 'AUTH'
+                      and authactivityid is null
+                      and activeflag = true
+                      and authworkgroupid <> @authWorkgroupId;";
+
+                await conn.ExecuteAsync(
+                    deactivateOthersSql,
+                    new { authDetailId = wg.AuthDetailId, authWorkgroupId, userId },
+                    tx);
+            }
+            else if (requestType == "ACTIVITY")
+            {
+                // ACTIVITY: do NOT update authdetail.authassignedto (per your rule)
+                // Deactivate other active ACTIVITY workgroup rows for this authdetail+authactivity
+                const string deactivateOthersActivitySql = @"
+                    update authworkgroup
+                    set activeflag = false,
+                        updatedon = now(),
+                        updatedby = @userId
+                    where authdetailid = @authDetailId
+                      and requesttype = 'ACTIVITY'
+                      and authactivityid = @authActivityId
+                      and activeflag = true
+                      and authworkgroupid <> @authWorkgroupId;";
+
+                await conn.ExecuteAsync(
+                    deactivateOthersActivitySql,
+                    new { authDetailId = wg.AuthDetailId, authActivityId = wg.AuthActivityId, authWorkgroupId, userId },
+                    tx);
+            }
+            else
+            {
+                throw new InvalidOperationException($"Unsupported requesttype '{wg.RequestType}'.");
+            }
+
+            await tx.CommitAsync();
+        }
+
+        private static int[] NormalizeWgWbIds(List<int>? ids, int? singleId)
+        {
+            if (ids != null && ids.Count > 0)
+                return ids.Where(x => x > 0).Distinct().ToArray();
+
+            return (singleId.HasValue && singleId.Value > 0)
+                ? new[] { singleId.Value }
+                : Array.Empty<int>();
         }
 
     }
