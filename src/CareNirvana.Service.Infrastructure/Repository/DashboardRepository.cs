@@ -1190,45 +1190,55 @@ namespace CareNirvana.Service.Infrastructure.Repository
         }
 
         public async Task<int> UpdateAuthActivityLinesAsync(
-            IEnumerable<int> lineIds,
-            string status,
-            string mdDecision,
-            string mdNotes,
-            int reviewedByUserId)
+    IEnumerable<int> lineIds,
+    string status,
+    string mdDecision,
+    string? mdNotes,
+    int reviewedByUserId)
         {
-            if (lineIds == null || !lineIds.Any())
-                return 0;
+            if (lineIds == null) return 0;
 
-            using var conn = new NpgsqlConnection(_connectionString);
+            var idArray = lineIds.Distinct().ToArray();
+            if (idArray.Length == 0) return 0;
+
+            await using var conn = new NpgsqlConnection(_connectionString);
             await conn.OpenAsync();
-
             await using var tx = await conn.BeginTransactionAsync();
 
-            const string sql = @"
-                UPDATE authactivityline
-                SET status = @status,
-                    mddecision = @mdDecision,
-                    mdnotes = @mdNotes,
-                    reviewedbyuserid = @reviewedByUserId,
-                    reviewedon = NOW(),
-                    updatedon = NOW()
-                WHERE id = ANY(@ids);";
+            try
+            {
+                const string updateSql = @"
+            UPDATE authactivityline
+            SET status           = @status,
+                mddecision       = @mdDecision,
+                mdnotes          = @mdNotes,
+                reviewedbyuserid = @reviewedByUserId,
+                reviewedon       = CASE WHEN @status = 'Completed' THEN NOW() ELSE reviewedon END,
+                updatedon        = NOW()
+            WHERE id = ANY(@ids);";
 
-            using var cmd = new NpgsqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("@status", status ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@mdDecision", mdDecision ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@mdNotes", mdNotes ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@reviewedByUserId", reviewedByUserId);
-            var idArray = lineIds.ToArray();
-            var p = cmd.Parameters.Add("@ids", NpgsqlDbType.Array | NpgsqlDbType.Integer);
-            p.Value = idArray;
+                await using var cmd = new NpgsqlCommand(updateSql, conn, tx);
 
-            //await tx.CommitAsync();
+                cmd.Parameters.AddWithValue("status", status);
+                cmd.Parameters.AddWithValue("mdDecision", mdDecision);
+                cmd.Parameters.AddWithValue("mdNotes", (object?)mdNotes ?? DBNull.Value);
+                cmd.Parameters.AddWithValue("reviewedByUserId", reviewedByUserId);
 
-            var affected = await cmd.ExecuteNonQueryAsync();
+                var idsParam = cmd.Parameters.Add("ids", NpgsqlDbType.Array | NpgsqlDbType.Integer);
+                idsParam.Value = idArray;
 
-            const string rollupSql = @"
-            WITH affected AS (
+                var affected = await cmd.ExecuteNonQueryAsync();
+                Console.WriteLine($"Update affected rows = {affected}");
+
+                if (affected == 0)
+                {
+                    await tx.RollbackAsync();
+                    return 0;
+                }
+
+                // Recompute rollups for all activities touched by these lines
+                const string rollupSql = @"
+            WITH affected_activities AS (
                 SELECT DISTINCT activityid
                 FROM authactivityline
                 WHERE id = ANY(@ids)
@@ -1237,40 +1247,49 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 SELECT
                     l.activityid,
                     COUNT(*) AS total,
-                    COUNT(*) FILTER (WHERE l.status = 'Approved') AS completed,
-                    COUNT(*) FILTER (WHERE l.status <> 'Approved') AS not_approved,
-                    COUNT(*) FILTER (WHERE l.mddecision = 'Approved' AND l.status = 'Approved') AS approved,
-                    COUNT(*) FILTER (WHERE l.mddecision = 'Denied'   AND l.status = 'Denied')   AS denied_count
+                    COUNT(*) FILTER (WHERE l.status = 'Completed') AS completed,
+                    COUNT(*) FILTER (WHERE l.status = 'Completed' AND l.mddecision = 'Approved') AS approved,
+                    COUNT(*) FILTER (WHERE l.status = 'Completed' AND l.mddecision = 'Denied')   AS denied,
+                    COUNT(*) FILTER (WHERE l.status = 'Completed' AND l.mddecision = 'Partial') AS partial
                 FROM authactivityline l
-                INNER JOIN affected a ON a.activityid = l.activityid
+                INNER JOIN affected_activities a ON a.activityid = l.activityid
                 GROUP BY l.activityid
             )
             UPDATE authactivity a
             SET service_line_count    = agg.total,
                 md_review_status      = CASE
-                                          WHEN agg.approved = agg.total THEN 'Approved'
-                                          WHEN agg.approved > 0         THEN 'InProgress'
-                                          ELSE 'Pending'
+                                           WHEN agg.completed = 0 THEN 'Pending'
+                                           WHEN agg.completed < agg.total THEN 'InProgress'
+                                           WHEN agg.approved = agg.total THEN 'Approved'
+                                           WHEN agg.denied   = agg.total THEN 'Denied'                            
+                                           ELSE 'Completed'
                                         END,
                 md_aggregate_decision = CASE
-                                          WHEN agg.approved = 0         THEN 'Pending'
-                                          WHEN agg.approved = agg.total THEN 'Approved'
-                                          WHEN agg.denied_count = agg.total THEN 'Denied'
-                                          ELSE 'Mixed'
+                                           WHEN agg.completed = 0 THEN 'Pending'
+                                           WHEN agg.completed < agg.total THEN 'InProgress'
+                                           WHEN agg.approved = agg.total THEN 'Approved'
+                                           WHEN agg.denied   = agg.total THEN 'Denied'
+                                           ELSE 'Mixed'
                                         END
             FROM agg
             WHERE a.authactivityid = agg.activityid;";
 
-            await using var roll = new NpgsqlCommand(rollupSql, conn, tx);
-            // reuse the same ids array
-            var p2 = roll.Parameters.Add("@ids", NpgsqlDbType.Array | NpgsqlDbType.Integer);
-            p2.Value = idArray;
+                await using var roll = new NpgsqlCommand(rollupSql, conn, tx);
+                var rollIds = roll.Parameters.Add("ids", NpgsqlDbType.Array | NpgsqlDbType.Integer);
+                rollIds.Value = idArray;
 
-            await roll.ExecuteNonQueryAsync();
+                await roll.ExecuteNonQueryAsync();
 
-            await tx.CommitAsync();
-            return affected;
+                await tx.CommitAsync();
+                return affected;
+            }
+            catch
+            {
+                await tx.RollbackAsync();
+                throw;
+            }
         }
+
 
 
         public async Task<long> InsertFaxFileAsync(FaxFile fax)

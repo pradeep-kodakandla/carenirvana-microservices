@@ -41,15 +41,15 @@ namespace CareNirvana.Service.Application.UseCases
             await _repository.SaveAsync(authTemplate, module);
         }
 
-        public async Task<AuthTemplateValidation?> GetByTemplateIdAsync(int templateId)
+        public async Task<TemplateValidation?> GetByTemplateIdAsync(int templateId)
         {
             return await _repository.GetByTemplateIdAsync(templateId);
         }
-        public async Task InsertAsync(AuthTemplateValidation entity)
+        public async Task InsertAsync(TemplateValidation entity)
         {
             await _repository.InsertAsync(entity);
         }
-        public async Task UpdateAsync(AuthTemplateValidation entity)
+        public async Task UpdateAsync(TemplateValidation entity)
         {
             await _repository.UpdateAsync(entity);
         }

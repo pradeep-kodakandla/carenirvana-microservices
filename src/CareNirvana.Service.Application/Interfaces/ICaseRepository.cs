@@ -23,6 +23,8 @@ namespace CareNirvana.Service.Application.Interfaces
             int userId,
             int completedStatusId   // required when ACCEPT
         );
+
+        Task<TemplateValidation?> GetCaseTemplateValidationAsync(int templateId);
     }
 
     public interface ICaseNotesRepository

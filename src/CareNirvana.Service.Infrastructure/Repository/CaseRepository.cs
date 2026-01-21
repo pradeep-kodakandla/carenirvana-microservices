@@ -20,6 +20,35 @@ namespace CareNirvana.Service.Infrastructure.Repository
         }
 
         private NpgsqlConnection CreateConn() => new NpgsqlConnection(_connStr);
+
+        public async Task<TemplateValidation?> GetCaseTemplateValidationAsync(int templateId)
+        {
+            const string sql = @"select cvd.validationid as id, cvd.referenceid as templateid, validationjson, cvd.createdon, cvd.createdby, cvd.updatedon, cvd.updatedby from cfgvalidation cv
+                                join cfgvalidationmapping cvd on cv.validationid = cvd.validationid
+                                where cvd.referenceid=@TemplateId and cv.moduleid=3 LIMIT 1";
+
+            await using var conn = CreateConn();
+
+            using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@TemplateId", templateId);
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            if (await reader.ReadAsync())
+            {
+                return new TemplateValidation
+                {
+                    Id = reader.GetInt32(0),
+                    TemplateId = reader.GetInt32(1),
+                    ValidationJson = reader.GetString(2),
+                    CreatedOn = reader.GetDateTime(3),
+                    CreatedBy = reader.GetInt32(4),
+                    UpdatedOn = reader.IsDBNull(5) ? null : reader.GetDateTime(5),
+                    UpdatedBy = reader.IsDBNull(6) ? null : reader.GetInt32(6)
+                };
+            }
+
+            return null;
+        }
         public async Task<CaseAggregate?> GetCaseByNumberAsync(string caseNumber, bool includeDeleted = false)
         {
             const string headerSql = @"
@@ -1400,5 +1429,10 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
             return found.HasValue;
         }
+
+
+
     }
+
+
 }

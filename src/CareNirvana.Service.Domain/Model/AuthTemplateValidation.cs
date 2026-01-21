@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 
 namespace CareNirvana.Service.Domain.Model
 {
-    public class AuthTemplateValidation
+    public class TemplateValidation
     {
         public int Id { get; set; }
         public int TemplateId { get; set; }
@@ -16,4 +16,6 @@ namespace CareNirvana.Service.Domain.Model
         public DateTime? UpdatedOn { get; set; }
         public int? UpdatedBy { get; set; }
     }
+
+
 }

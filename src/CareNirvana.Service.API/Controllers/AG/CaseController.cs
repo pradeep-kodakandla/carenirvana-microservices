@@ -175,6 +175,17 @@ public class CaseController : ControllerBase
         );
         return NoContent();
     }
+
+    [HttpGet("templaterevalidation/{templateId:int}")]
+    public async Task<IActionResult> GetCaseTemplateValidation(int templateId)
+    {
+        if (templateId <= 0)
+            return BadRequest(new { message = "Invalid TemplateId." });
+        var validation = await _caseRepository.GetCaseTemplateValidationAsync(templateId);
+        if (validation == null)
+            return NotFound(new { message = "Template validation not found." });
+        return Ok(validation);
+    }
 }
 
 

@@ -351,14 +351,16 @@ namespace CareNirvana.Service.Infrastructure.Repository
                         cmd.Parameters.AddWithValue("expectedVersion", expectedVersion.Value);
 
                     var affected = await cmd.ExecuteNonQueryAsync();
+                    
                     if (affected == 0)
                     {
                         // Either not found OR version mismatch
                         await tx.RollbackAsync();
                         return false;
                     }
-                }
 
+                }
+                
                 await RecomputeMdReviewRollupInTxAsync(conn, tx, (int)activityId);
                 await tx.CommitAsync();
                 return true;

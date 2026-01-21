@@ -236,33 +236,60 @@ namespace CareNirvana.Service.Infrastructure.Repository
             }
         }
 
-        public async Task<AuthTemplateValidation?> GetByTemplateIdAsync(int templateId)
+        public async Task<TemplateValidation?> GetByTemplateIdAsync(int templateId)
         {
-            const string sql = @"SELECT * FROM AuthTemplateValidation WHERE TemplateId = @TemplateId LIMIT 1";
-            using var conn = new NpgsqlConnection(_connectionString);
-            await conn.OpenAsync();
-            using var cmd = new NpgsqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("@TemplateId", templateId);
-            using var reader = await cmd.ExecuteReaderAsync();
+            const string sql = @"
+        select cvd.validationid as id,
+               cvd.referenceid as templateid,
+               cv.validationjson,
+               cvd.createdon,
+               cvd.createdby,
+               cvd.updatedon,
+               cvd.updatedby
+        from cfgvalidation cv
+        join cfgvalidationmapping cvd on cv.validationid = cvd.validationid
+        where cvd.referenceid = @TemplateId
+          and cv.moduleid = 2
+        limit 1;";
 
-            if (await reader.ReadAsync())
+            Console.WriteLine($"[GetByTemplateIdAsync] templateId = {templateId}");
+            Console.WriteLine($"[GetByTemplateIdAsync] conn = {_connectionString}");
+
+            await using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+
+            await using var cmd = new NpgsqlCommand(sql, conn);
+
+            // IMPORTANT: avoid AddWithValue inference issues
+            cmd.Parameters.Add("@TemplateId", NpgsqlTypes.NpgsqlDbType.Integer).Value = templateId;
+
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            Console.WriteLine($"[GetByTemplateIdAsync] HasRows = {reader.HasRows}");
+
+            if (!await reader.ReadAsync())
             {
-                return new AuthTemplateValidation
-                {
-                    Id = reader.GetInt32(0),
-                    TemplateId = reader.GetInt32(1),
-                    ValidationJson = reader.GetString(2),
-                    CreatedOn = reader.GetDateTime(3),
-                    CreatedBy = reader.GetInt32(4),
-                    UpdatedOn = reader.IsDBNull(5) ? null : reader.GetDateTime(5),
-                    UpdatedBy = reader.IsDBNull(6) ? null : reader.GetInt32(6)
-                };
+                Console.WriteLine($"[GetByTemplateIdAsync] No row returned for templateId={templateId}");
+                return null;
             }
 
-            return null;
+            var result = new TemplateValidation
+            {
+                Id = reader.GetInt32(0),
+                TemplateId = reader.GetInt32(1),
+                ValidationJson = reader.GetString(2),
+                CreatedOn = reader.GetDateTime(3),
+                CreatedBy = reader.GetInt32(4),
+                UpdatedOn = reader.IsDBNull(5) ? null : reader.GetDateTime(5),
+                UpdatedBy = reader.IsDBNull(6) ? null : reader.GetInt32(6)
+            };
+
+            Console.WriteLine($"[GetByTemplateIdAsync] Found: Id={result.Id}, TemplateId={result.TemplateId}");
+            return result;
         }
 
-        public async Task InsertAsync(AuthTemplateValidation entity)
+
+        public async Task InsertAsync(TemplateValidation entity)
         {
             const string sql = @"
             INSERT INTO AuthTemplateValidation (TemplateId, ValidationJson, CreatedOn, CreatedBy)
@@ -277,7 +304,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
             await cmd.ExecuteNonQueryAsync();
         }
 
-        public async Task UpdateAsync(AuthTemplateValidation entity)
+        public async Task UpdateAsync(TemplateValidation entity)
         {
             const string sql = @"
             UPDATE AuthTemplateValidation 

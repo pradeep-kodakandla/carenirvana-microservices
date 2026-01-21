@@ -98,14 +98,14 @@ namespace CareNirvana.Service.API.Controllers
         }
 
         [HttpPost("validation/save")]
-        public async Task<IActionResult> Save([FromBody] AuthTemplateValidation dto)
+        public async Task<IActionResult> Save([FromBody] TemplateValidation dto)
         {
             await _getAuthTemplatesQuery.InsertAsync(dto);
             return Ok(new { message = "Validation rules saved successfully." });
         }
 
         [HttpPost("validation/update")]
-        public async Task<IActionResult> Update([FromBody] AuthTemplateValidation dto)
+        public async Task<IActionResult> Update([FromBody] TemplateValidation dto)
         {
             await _getAuthTemplatesQuery.UpdateAsync(dto);
             return Ok(new { message = "Validation rules updated successfully." });
