@@ -462,122 +462,161 @@ namespace CareNirvana.Service.Infrastructure.Repository
         {
             const string sql = @"
                     SELECT
-                      ad.authnumber,
-                      ad.authstatus,
-                      rl.authstatusvalue,
-                      at.templatename,
-                      ac.authclassvalue,
-                      ad.memberdetailsid,
-                      md.memberid,
-                      ad.nextreviewdate,
-                      ad.authduedate,
-                      ad.createdon,
-                      ad.createdby,
-                      su.username AS createduser,
-                      ad.updatedon,
-                      ad.updatedby,
-                      -- from Auth Details (header-level)
-                      ah.treatmenttype_hdr  AS treatmenttype,
-                      tt.treatmentTypeValue,
-                      ah.authpriority_hdr   AS authpriority,
-                      rp.requestPriorityValue,
-                      concat(md.firstname, ' ', md.lastname) AS membername
+                        ad.authdetailid,
+                        ad.authnumber,
+                        ad.authstatus,
+                        rl.authstatusvalue,
+                        at.authtemplatename AS templatename,
+                        at.authtemplateid,
+                        ac.authclassvalue,
+                        ad.memberdetailsid,
+                        md.memberid,
+                        ad.nextreviewdate,
+                        ad.authduedate,
+                        ad.createdon,
+                        ad.createdby,
+                        su.username AS createduser,
+                        ad.updatedon,
+                        ad.updatedby,
+
+                        -- values stored at root level in JSON
+                        ah.treatmenttype_json AS treatmenttype,
+                        tt.treatmenttypevalue AS treatmenttypevalue,
+                        ah.authpriority_json AS authpriority,
+                        rp.requestpriorityvalue AS requestpriorityvalue,
+
+                        concat(md.firstname, ' ', md.lastname) AS membername
+
                     FROM public.authdetail ad
 
                     -- normalize JSON root (array[0] vs object)
                     LEFT JOIN LATERAL (
-                      SELECT CASE
-                               WHEN jsonb_typeof(ad.data::jsonb) = 'array' THEN ad.data::jsonb -> 0
-                               ELSE ad.data::jsonb
-                             END AS root
+                        SELECT CASE
+                            WHEN jsonb_typeof(ad.data::jsonb) = 'array' THEN ad.data::jsonb -> 0
+                            ELSE ad.data::jsonb
+                        END AS root
                     ) j ON TRUE
 
-                    -- header-level fields (Auth Details -> entries[0])
+                    -- root-level fields (new save payload)
                     LEFT JOIN LATERAL (
-                      SELECT
-                        (j.root->'Auth Details'->'entries'->0->>'treatmentType')   AS treatmenttype_hdr,
-                        (j.root->'Auth Details'->'entries'->0->>'requestPriority') AS authpriority_hdr
+                        SELECT
+                            (j.root->>'treatmentType') AS treatmenttype_json,
+                            COALESCE(j.root->>'requestPriority', j.root->>'requestSent') AS authpriority_json
                     ) ah ON TRUE
 
                     -- lookups
                     LEFT JOIN LATERAL (
-                      SELECT elem->>'authStatus' AS authstatusvalue
-                      FROM cfgadmindata cad,
-                           jsonb_array_elements(cad.jsoncontent::jsonb->'authstatus') elem
-                      WHERE (elem->>'id')::int = ad.authstatus
-                        AND cad.module = 'UM'
-                      LIMIT 1
+                        SELECT elem->>'authStatus' AS authstatusvalue
+                        FROM cfgadmindata cad,
+                             jsonb_array_elements(cad.jsoncontent::jsonb->'authstatus') elem
+                        WHERE (elem->>'id')::int = ad.authstatus
+                          AND cad.module = 'UM'
+                        LIMIT 1
                     ) rl ON TRUE
 
                     LEFT JOIN LATERAL (
-                      SELECT elem->>'authClass' AS authclassvalue
-                      FROM cfgadmindata cad,
-                           jsonb_array_elements(cad.jsoncontent::jsonb->'authclass') elem
-                      WHERE (elem->>'id')::int = ad.authclassid
-                        AND cad.module = 'UM'
-                      LIMIT 1
+                        SELECT elem->>'authClass' AS authclassvalue
+                        FROM cfgadmindata cad,
+                             jsonb_array_elements(cad.jsoncontent::jsonb->'authclass') elem
+                        WHERE (elem->>'id')::int = ad.authclassid
+                          AND cad.module = 'UM'
+                        LIMIT 1
                     ) ac ON TRUE
 
                     LEFT JOIN LATERAL (
-                      SELECT elem->>'requestPriority' AS requestPriorityValue
-                      FROM cfgadmindata cad,
-                           jsonb_array_elements(cad.jsoncontent::jsonb->'requestpriority') elem
-                      WHERE (elem->>'id')::text = ah.authpriority_hdr
-                        AND cad.module = 'UM'
-                      LIMIT 1
+                        SELECT elem->>'requestPriority' AS requestpriorityvalue
+                        FROM cfgadmindata cad,
+                             jsonb_array_elements(cad.jsoncontent::jsonb->'requestpriority') elem
+                        WHERE (elem->>'id')::text = ah.authpriority_json
+                          AND cad.module = 'UM'
+                        LIMIT 1
                     ) rp ON TRUE
 
                     LEFT JOIN LATERAL (
-                      SELECT elem->>'treatmentType' AS treatmentTypeValue
-                      FROM cfgadmindata cad,
-                           jsonb_array_elements(cad.jsoncontent::jsonb->'treatmenttype') elem
-                      WHERE (elem->>'id')::text = ah.treatmenttype_hdr
-                        AND cad.module = 'UM'
-                      LIMIT 1
+                        SELECT elem->>'treatmentType' AS treatmenttypevalue
+                        FROM cfgadmindata cad,
+                             jsonb_array_elements(cad.jsoncontent::jsonb->'treatmenttype') elem
+                        WHERE (elem->>'id')::text = ah.treatmenttype_json
+                          AND cad.module = 'UM'
+                        LIMIT 1
                     ) tt ON TRUE
 
-                    LEFT JOIN authtemplate at ON at.id = ad.authtypeid
+                    LEFT JOIN cfgauthtemplate at ON at.authtemplateid = ad.authtypeid
                     LEFT JOIN securityuser su ON su.userid = ad.createdby
-                    LEFT JOIN memberdetails md on md.memberdetailsid = ad.memberdetailsid
-                    WHERE ad.deletedby IS NULL and ad.authassignedto = @userId
-                    ORDER BY ad.createdon DESC;";
+                    LEFT JOIN memberdetails md ON md.memberdetailsid = ad.memberdetailsid
+
+                    WHERE ad.deletedby IS NULL
+                      AND ad.authassignedto = @userId
+                    ORDER BY ad.createdon DESC;
+                ";
 
             var results = new List<AuthDetailListItem>();
 
-            using var conn = new NpgsqlConnection(_connectionString);
+            await using var conn = new NpgsqlConnection(_connectionString);
             await conn.OpenAsync();
 
-            using var cmd = new NpgsqlCommand(sql, conn);
+            await using var cmd = new NpgsqlCommand(sql, conn);
             cmd.Parameters.AddWithValue("@userId", userId);
 
-            using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SequentialAccess);
+            await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SequentialAccess);
+
+            // Cache ordinals ONCE (also guarantees column names match)
+            int o_authid = reader.GetOrdinal("authdetailid");
+            int o_authnumber = reader.GetOrdinal("authnumber");
+            int o_authstatus = reader.GetOrdinal("authstatus");
+            int o_authstatusvalue = reader.GetOrdinal("authstatusvalue");
+            int o_templatename = reader.GetOrdinal("templatename");
+            int o_authtemplateid = reader.GetOrdinal("authtemplateid");
+            int o_authclassvalue = reader.GetOrdinal("authclassvalue");
+            int o_memberdetailsid = reader.GetOrdinal("memberdetailsid");
+            int o_memberid = reader.GetOrdinal("memberid");
+            int o_nextreviewdate = reader.GetOrdinal("nextreviewdate");
+            int o_authduedate = reader.GetOrdinal("authduedate");
+            int o_createdon = reader.GetOrdinal("createdon");
+            int o_createdby = reader.GetOrdinal("createdby");
+            int o_createduser = reader.GetOrdinal("createduser");
+            int o_updatedon = reader.GetOrdinal("updatedon");
+            int o_updatedby = reader.GetOrdinal("updatedby");
+            int o_treatmenttype = reader.GetOrdinal("treatmenttype");
+            int o_treatmenttypevalue = reader.GetOrdinal("treatmenttypevalue");
+            int o_authpriority = reader.GetOrdinal("authpriority");
+            int o_requestpriorityvalue = reader.GetOrdinal("requestpriorityvalue");
+            int o_membername = reader.GetOrdinal("membername");
 
             while (await reader.ReadAsync())
             {
                 var item = new AuthDetailListItem
                 {
-                    AuthNumber = reader["authnumber"]?.ToString() ?? "",
-                    AuthStatus = reader.IsDBNull(reader.GetOrdinal("authstatus")) ? null : reader.GetInt32(reader.GetOrdinal("authstatus")),
-                    AuthStatusValue = reader.IsDBNull(reader.GetOrdinal("authstatusvalue")) ? null : reader.GetString(reader.GetOrdinal("authstatusvalue")),
-                    TemplateName = reader.IsDBNull(reader.GetOrdinal("templatename")) ? null : reader.GetString(reader.GetOrdinal("templatename")),
-                    AuthClassValue = reader.IsDBNull(reader.GetOrdinal("authclassvalue")) ? null : reader.GetString(reader.GetOrdinal("authclassvalue")),
+                    AuthDetailId = reader.IsDBNull(o_authid) ? (int?)null : reader.GetInt32(o_authid),
+                    AuthNumber = reader.IsDBNull(o_authnumber) ? "" : reader.GetString(o_authnumber),
 
-                    MemberDetailsId = reader.IsDBNull(reader.GetOrdinal("memberdetailsid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("memberdetailsid")),
-                    MemberId = reader.IsDBNull(reader.GetOrdinal("memberid")) ? 0 : reader.GetInt32(reader.GetOrdinal("memberid")),
-                    NextReviewDate = reader.IsDBNull(reader.GetOrdinal("nextreviewdate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("nextreviewdate")),
-                    AuthDueDate = reader.IsDBNull(reader.GetOrdinal("authduedate")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("authduedate")),
+                    AuthStatus = reader.IsDBNull(o_authstatus) ? (int?)null : reader.GetInt32(o_authstatus),
+                    AuthStatusValue = reader.IsDBNull(o_authstatusvalue) ? null : reader.GetString(o_authstatusvalue),
 
-                    CreatedOn = reader.GetDateTime(reader.GetOrdinal("createdon")),
-                    CreatedBy = reader.IsDBNull(reader.GetOrdinal("createdby")) ? 0 : reader.GetInt32(reader.GetOrdinal("createdby")),
-                    CreatedUser = reader.IsDBNull(reader.GetOrdinal("createduser")) ? null : reader.GetString(reader.GetOrdinal("createduser")),
-                    UpdatedOn = reader.IsDBNull(reader.GetOrdinal("updatedon")) ? (DateTime?)null : reader.GetDateTime(reader.GetOrdinal("updatedon")),
-                    UpdatedBy = reader.IsDBNull(reader.GetOrdinal("updatedby")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("updatedby")),
+                    TemplateName = reader.IsDBNull(o_templatename) ? null : reader.GetString(o_templatename),
+                    AuthtemplateId = reader.IsDBNull(o_authtemplateid) ? (int?)null : reader.GetInt32(o_authtemplateid),
+                    AuthClassValue = reader.IsDBNull(o_authclassvalue) ? null : reader.GetString(o_authclassvalue),
 
-                    TreatmentType = reader.IsDBNull(reader.GetOrdinal("treatmenttype")) ? null : reader.GetString(reader.GetOrdinal("treatmenttype")),
-                    TreatmentTypeValue = reader.IsDBNull(reader.GetOrdinal("treatmentTypeValue")) ? null : reader.GetString(reader.GetOrdinal("treatmentTypeValue")),
-                    AuthPriority = reader.IsDBNull(reader.GetOrdinal("authpriority")) ? null : reader.GetString(reader.GetOrdinal("authpriority")),
-                    RequestPriorityValue = reader.IsDBNull(reader.GetOrdinal("requestPriorityValue")) ? null : reader.GetString(reader.GetOrdinal("requestPriorityValue")),
-                    MemberName = reader.IsDBNull(reader.GetOrdinal("membername")) ? null : reader.GetString(reader.GetOrdinal("membername"))
+                    MemberDetailsId = reader.IsDBNull(o_memberdetailsid) ? (int?)null : reader.GetInt32(o_memberdetailsid),
+                    MemberId = reader.IsDBNull(o_memberid) ? 0 : reader.GetInt32(o_memberid),
+
+                    NextReviewDate = reader.IsDBNull(o_nextreviewdate) ? (DateTime?)null : reader.GetDateTime(o_nextreviewdate),
+                    AuthDueDate = reader.IsDBNull(o_authduedate) ? (DateTime?)null : reader.GetDateTime(o_authduedate),
+
+                    CreatedOn = reader.GetDateTime(o_createdon),
+                    CreatedBy = reader.IsDBNull(o_createdby) ? 0 : reader.GetInt32(o_createdby),
+                    CreatedUser = reader.IsDBNull(o_createduser) ? null : reader.GetString(o_createduser),
+
+                    UpdatedOn = reader.IsDBNull(o_updatedon) ? (DateTime?)null : reader.GetDateTime(o_updatedon),
+                    UpdatedBy = reader.IsDBNull(o_updatedby) ? (int?)null : reader.GetInt32(o_updatedby),
+
+                    TreatmentType = reader.IsDBNull(o_treatmenttype) ? null : reader.GetString(o_treatmenttype),
+                    TreatmentTypeValue = reader.IsDBNull(o_treatmenttypevalue) ? null : reader.GetString(o_treatmenttypevalue),
+
+                    AuthPriority = reader.IsDBNull(o_authpriority) ? null : reader.GetString(o_authpriority),
+                    RequestPriorityValue = reader.IsDBNull(o_requestpriorityvalue) ? null : reader.GetString(o_requestpriorityvalue),
+
+                    MemberName = reader.IsDBNull(o_membername) ? null : reader.GetString(o_membername)
                 };
 
                 results.Add(item);
@@ -585,6 +624,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
             return results;
         }
+
 
         public async Task<List<ActivityItem>> GetPendingActivitiesAsync(int? userId = null)
         {
@@ -1802,6 +1842,10 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                 )
                                 SELECT
                                   ch.casenumber                                  AS ""CaseNumber"",
+                                  ch.caseheaderid                               AS ""CaseHeaderId"",
+                                  cd.casedetailid                               AS ""CaseDetailId"",
+                                  cct.casetemplateid                            AS ""CaseTemplateId"",
+                                  cct.casetemplatename                          AS ""CaseTemplateName"",
                                   ch.memberdetailid                              AS ""MemberDetailId"",
                                   ch.casetype::text                              AS ""CaseType"",
                                   COALESCE(ct.casetype_name, ch.casetype::text)  AS ""CaseTypeText"",
@@ -1831,6 +1875,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                   LIMIT 1
                                 ) cd ON TRUE
                                 JOIN memberdetails md ON md.memberdetailsid = ch.memberdetailid
+                                JOIN cfgcasetemplate cct on cct.casetemplateid = ch.casetype::int
                                 JOIN securityuser  su ON su.userid = ch.createdby
                                 LEFT JOIN casetype_lu    ct ON ct.id = ch.casetype::text
                                 LEFT JOIN casestatus_lu  cs ON cs.id = (cd.jsondata::jsonb ->> 'Case_Status_Details_caseStatus')

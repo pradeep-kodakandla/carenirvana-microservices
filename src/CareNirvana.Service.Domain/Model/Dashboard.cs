@@ -43,10 +43,12 @@ namespace CareNirvana.Service.Domain.Model
 
     public sealed class AuthDetailListItem
     {
+        public int? AuthDetailId { get; set; }
         public string AuthNumber { get; set; } = "";
         public int? AuthStatus { get; set; }
         public string? AuthStatusValue { get; set; }
         public string? TemplateName { get; set; }
+        public int? AuthtemplateId { get; set; }
         public string? AuthClassValue { get; set; }
 
         public int MemberId { get; set; }
@@ -245,6 +247,10 @@ namespace CareNirvana.Service.Domain.Model
     public sealed class AgCaseRow
     {
         public string? CaseNumber { get; set; }
+        public int? CaseHeaderId { get; set; }
+        public string? CaseDetailId { get; set; }
+        public string? CaseTemplateId { get; set; }
+        public string? CaseTemplateName { get; set; }
         public int? MemberDetailId { get; set; }
 
         // Stored id from CASEHEADER
