@@ -249,7 +249,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                     from cfgadmindata cad,
                                          jsonb_array_elements(cad.jsoncontent::jsonb->'risklevel') elem
                                     where (elem->>'id')::int = mr.risklevelid
-                                      and cad.module = 'ADMIN'
+                                      and cad.module = 'CM'
                                     limit 1
                                 ) rl on true
                                 left join lateral (
