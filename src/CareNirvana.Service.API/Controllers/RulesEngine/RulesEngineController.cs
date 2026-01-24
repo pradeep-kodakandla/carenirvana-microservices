@@ -141,5 +141,49 @@ namespace CareNirvana.Service.Api.Controllers
         }
 
 
+
+
+
+        // GET api/rulesengine/ruledatafunctions
+        [HttpGet("datafunctions")]
+        public async Task<ActionResult<IReadOnlyList<RuleDataFunctionListDto>>> GetRuleDataFunctions()
+      => Ok(await _repo.GetRuleDataFunctionsAsync());
+
+        [HttpGet("datafunctions/{id:long}")]
+        public async Task<ActionResult<RuleDataFunctionDto>> GetRuleDataFunction(long id)
+        {
+            var row = await _repo.GetRuleDataFunctionAsync(id);
+            return row == null ? NotFound() : Ok(row);
+        }
+
+        [HttpGet("datafunctions/{id:long}/json")]
+        public async Task<IActionResult> GetRuleDataFunctionJson(long id)
+        {
+            var json = await _repo.GetRuleDataFunctionJsonAsync(id);
+            return json == null ? NotFound() : Content(json, "application/json");
+        }
+
+        [HttpPost("datafunctions")]
+        public async Task<ActionResult<long>> CreateRuleDataFunction([FromBody] UpsertRuleDataFunctionRequest req)
+        {
+            var id = await _repo.CreateRuleDataFunctionAsync(req, userId: null);
+            return Ok(id);
+        }
+
+        [HttpPut("datafunctions/{id:long}")]
+        public async Task<IActionResult> UpdateRuleDataFunction(long id, [FromBody] UpsertRuleDataFunctionRequest req)
+        {
+            await _repo.UpdateRuleDataFunctionAsync(id, req, userId: null);
+            return NoContent();
+        }
+
+        [HttpDelete("datafunctions/{id:long}")]
+        public async Task<IActionResult> DeleteRuleDataFunction(long id)
+        {
+            await _repo.SoftDeleteRuleDataFunctionAsync(id, userId: null);
+            return NoContent();
+        }
+
+
     }
 }

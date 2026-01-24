@@ -45,5 +45,15 @@ namespace CareNirvana.Service.Application.Interfaces
         public Task<IReadOnlyList<RuleDataFieldDto>> GetRuleDataFieldsAsync(long? moduleId = null);
         public Task<string?> GetRuleDataFieldJsonAsync(long ruleDataFieldId);
 
+
+
+        Task<IReadOnlyList<RuleDataFunctionListDto>> GetRuleDataFunctionsAsync();
+        Task<RuleDataFunctionDto?> GetRuleDataFunctionAsync(long id);
+        Task<string?> GetRuleDataFunctionJsonAsync(long id);
+
+        Task<long> CreateRuleDataFunctionAsync(UpsertRuleDataFunctionRequest req, long? userId = null);
+        Task UpdateRuleDataFunctionAsync(long id, UpsertRuleDataFunctionRequest req, long? userId = null);
+        Task SoftDeleteRuleDataFunctionAsync(long id, long? userId = null);
+
     }
 }

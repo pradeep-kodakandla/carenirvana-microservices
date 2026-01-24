@@ -407,5 +407,136 @@ namespace CareNirvana.Service.Infrastructure.Repository
             return await db.ExecuteScalarAsync<string?>(sql, new { Id = ruleDataFieldId });
         }
 
+
+
+        public async Task<IReadOnlyList<RuleDataFunctionListDto>> GetRuleDataFunctionsAsync()
+        {
+            const string sql = @"
+        select
+          ruledatafunctionid as Id,
+          ruledatafunctionname as Name,
+          deploymentstatus as DeploymentStatus,
+          version,
+          coalesce(updatedon, createdon) as UpdatedOn,
+          activeflag as ActiveFlag
+        from rulesengine.cfgruledatafunction
+        where deletedon is null
+        order by ruledatafunctionid desc;";
+
+            using var db = Conn();
+            var rows = await db.QueryAsync<RuleDataFunctionListDto>(sql);
+            return rows.AsList();
+        }
+
+        public async Task<RuleDataFunctionDto?> GetRuleDataFunctionAsync(long id)
+        {
+            const string sql = @"
+        select
+          ruledatafunctionid as RuleDataFunctionId,
+          ruledatafunctionname as RuleDataFunctionName,
+          description,
+          deploymentstatus as DeploymentStatus,
+          version,
+          ruledatafunctionjson::text as RuleDataFunctionJson,
+          activeflag as ActiveFlag,
+          createdon as CreatedOn,
+          createdby as CreatedBy,
+          updatedon as UpdatedOn,
+          updatedby as UpdatedBy,
+          deletedon as DeletedOn,
+          deletedby as DeletedBy
+        from rulesengine.cfgruledatafunction
+        where ruledatafunctionid = @Id
+          and deletedon is null;";
+
+            using var db = Conn();
+            return await db.QueryFirstOrDefaultAsync<RuleDataFunctionDto>(sql, new { Id = id });
+        }
+
+        public async Task<string?> GetRuleDataFunctionJsonAsync(long id)
+        {
+            const string sql = @"
+        select ruledatafunctionjson::text
+        from rulesengine.cfgruledatafunction
+        where ruledatafunctionid = @Id
+          and deletedon is null;";
+
+            using var db = Conn();
+            return await db.ExecuteScalarAsync<string?>(sql, new { Id = id });
+        }
+
+        public async Task<long> CreateRuleDataFunctionAsync(UpsertRuleDataFunctionRequest req, long? userId = null)
+        {
+            // IMPORTANT:
+            // Your DDL shows ruledatafunctionid has no DEFAULT/IDENTITY.
+            // If the DB does NOT auto-generate it, change insert to supply an Id (or add a sequence default).
+            const string sql = @"
+        insert into rulesengine.cfgruledatafunction
+          (ruledatafunctionname, description, deploymentstatus, version, ruledatafunctionjson, activeflag, createdby)
+        values
+          (@Name, @Description, @DeploymentStatus, @Version, @Json::jsonb, @ActiveFlag, @UserId)
+        returning ruledatafunctionid;";
+
+            var json = JsonSerializer.Serialize(req.RuleDataFunctionJson);
+
+            using var db = Conn();
+            return await db.ExecuteScalarAsync<long>(sql, new
+            {
+                req.Name,
+                req.Description,
+                req.DeploymentStatus,
+                req.Version,
+                Json = json,
+                req.ActiveFlag,
+                UserId = userId
+            });
+        }
+
+        public async Task UpdateRuleDataFunctionAsync(long id, UpsertRuleDataFunctionRequest req, long? userId = null)
+        {
+            const string sql = @"
+        update rulesengine.cfgruledatafunction
+        set
+          ruledatafunctionname = @Name,
+          description = @Description,
+          deploymentstatus = @DeploymentStatus,
+          version = @Version,
+          ruledatafunctionjson = @Json::jsonb,
+          activeflag = @ActiveFlag,
+          updatedon = now(),
+          updatedby = @UserId
+        where ruledatafunctionid = @Id
+          and deletedon is null;";
+
+            var json = JsonSerializer.Serialize(req.RuleDataFunctionJson);
+
+            using var db = Conn();
+            await db.ExecuteAsync(sql, new
+            {
+                Id = id,
+                req.Name,
+                req.Description,
+                req.DeploymentStatus,
+                req.Version,
+                Json = json,
+                req.ActiveFlag,
+                UserId = userId
+            });
+        }
+
+        public async Task SoftDeleteRuleDataFunctionAsync(long id, long? userId = null)
+        {
+            const string sql = @"
+        update rulesengine.cfgruledatafunction
+        set activeflag = false,
+            deletedon = now(),
+            deletedby = @UserId
+        where ruledatafunctionid = @Id
+          and deletedon is null;";
+
+            using var db = Conn();
+            await db.ExecuteAsync(sql, new { Id = id, UserId = userId });
+        }
+
     }
 }

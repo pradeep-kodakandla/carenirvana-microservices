@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace CareNirvana.Service.Domain.Model
@@ -130,4 +131,44 @@ namespace CareNirvana.Service.Domain.Model
     }
 
 
+    public sealed class RuleDataFunctionDto
+    {
+        public long RuleDataFunctionId { get; set; }
+        public string RuleDataFunctionName { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string DeploymentStatus { get; set; } = "";
+        public int Version { get; set; }
+        public string RuleDataFunctionJson { get; set; } = "{}"; // stored as text for API/repo, cast to jsonb in SQL
+        public bool ActiveFlag { get; set; }
+
+        public DateTimeOffset CreatedOn { get; set; }
+        public long? CreatedBy { get; set; }
+        public DateTimeOffset? UpdatedOn { get; set; }
+        public long? UpdatedBy { get; set; }
+        public DateTimeOffset? DeletedOn { get; set; }
+        public long? DeletedBy { get; set; }
+    }
+
+    public sealed class RuleDataFunctionListDto
+    {
+        public long Id { get; set; }
+        public string Name { get; set; } = "";
+        public string DeploymentStatus { get; set; } = "";
+        public int Version { get; set; }
+        public DateTimeOffset UpdatedOn { get; set; }
+        public bool ActiveFlag { get; set; }
+    }
+
+    public sealed class UpsertRuleDataFunctionRequest
+    {
+        public string Name { get; set; } = "";
+        public string Description { get; set; } = "";
+        public string DeploymentStatus { get; set; } = "DRAFT";
+        public int Version { get; set; } = 1;
+
+        // Accept arbitrary JSON from API callers
+        public JsonElement RuleDataFunctionJson { get; set; }
+
+        public bool ActiveFlag { get; set; } = true;
+    }
 }
