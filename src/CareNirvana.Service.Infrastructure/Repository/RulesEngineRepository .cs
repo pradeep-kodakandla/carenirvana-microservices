@@ -538,5 +538,40 @@ namespace CareNirvana.Service.Infrastructure.Repository
             await db.ExecuteAsync(sql, new { Id = id, UserId = userId });
         }
 
+
+
+
+        public async Task<RulesDashboardCountsRow> GetDashboardCountsAsync()
+        {
+            const string sql = @"
+        select
+          (select count(*)
+             from rulesengine.cfgrule
+            where deletedon is null
+              and activeflag = true) as ActiveRules,
+
+          (select count(*)
+             from rulesengine.cfgrulegroup
+            where deletedon is null) as RuleGroupsTotal,
+
+          (select count(*)
+             from rulesengine.cfgrulegroup
+            where deletedon is null
+              and activeflag = true) as RuleGroupsActive,
+
+          (select count(*)
+             from rulesengine.cfgruledatafunction
+            where deletedon is null) as DataFunctionsTotal,
+
+          (select count(*)
+             from rulesengine.cfgruledatafunction
+            where deletedon is null
+              and activeflag = true) as DataFunctionsActive;
+    ";
+
+            using var db = Conn();
+            return await db.QuerySingleAsync<RulesDashboardCountsRow>(sql);
+        }
+
     }
 }

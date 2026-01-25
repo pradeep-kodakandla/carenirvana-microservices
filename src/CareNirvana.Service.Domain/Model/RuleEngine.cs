@@ -171,4 +171,28 @@ namespace CareNirvana.Service.Domain.Model
 
         public bool ActiveFlag { get; set; } = true;
     }
+
+    public sealed class DashboardKpiDto
+    {
+        public long Value { get; set; }
+        public string Sub { get; set; } = "";
+    }
+
+    public sealed class RulesDashboardStatsDto
+    {
+        public DashboardKpiDto ActiveRules { get; set; } = new();
+        public DashboardKpiDto RuleGroups { get; set; } = new();
+        public DashboardKpiDto DataFunctions { get; set; } = new();
+        public DashboardKpiDto RecordsProcessed { get; set; } = new(); // keep static for now (no source yet)
+    }
+
+    public sealed class RulesDashboardCountsRow
+    {
+        public long ActiveRules { get; set; }
+        public long RuleGroupsTotal { get; set; }
+        public long RuleGroupsActive { get; set; }
+        public long DataFunctionsTotal { get; set; }
+        public long DataFunctionsActive { get; set; }
+    }
+
 }

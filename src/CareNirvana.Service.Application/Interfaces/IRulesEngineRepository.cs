@@ -55,5 +55,7 @@ namespace CareNirvana.Service.Application.Interfaces
         Task UpdateRuleDataFunctionAsync(long id, UpsertRuleDataFunctionRequest req, long? userId = null);
         Task SoftDeleteRuleDataFunctionAsync(long id, long? userId = null);
 
+        Task<RulesDashboardCountsRow> GetDashboardCountsAsync();
+
     }
 }

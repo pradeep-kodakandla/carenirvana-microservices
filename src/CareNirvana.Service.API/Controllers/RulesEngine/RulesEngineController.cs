@@ -184,6 +184,37 @@ namespace CareNirvana.Service.Api.Controllers
             return NoContent();
         }
 
+        [HttpGet("dashboard")]
+        public async Task<ActionResult<RulesDashboardStatsDto>> GetDashboard()
+        {
+            var c = await _repo.GetDashboardCountsAsync();
 
+            // RecordsProcessed: keep static until we wire to execution/audit logs
+            var dto = new RulesDashboardStatsDto
+            {
+                ActiveRules = new DashboardKpiDto
+                {
+                    Value = c.ActiveRules,
+                    Sub = "ActiveFlag = true"
+                },
+                RuleGroups = new DashboardKpiDto
+                {
+                    Value = c.RuleGroupsTotal,
+                    Sub = $"{c.RuleGroupsActive} active"
+                },
+                DataFunctions = new DashboardKpiDto
+                {
+                    Value = c.DataFunctionsTotal,
+                    Sub = $"{c.DataFunctionsActive} active"
+                },
+                RecordsProcessed = new DashboardKpiDto
+                {
+                    Value = 0,
+                    Sub = "Static for now"
+                }
+            };
+
+            return Ok(dto);
+        }
     }
 }
