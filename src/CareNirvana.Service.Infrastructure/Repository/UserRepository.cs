@@ -110,7 +110,14 @@ namespace CareNirvana.Service.Infrastructure.Repository
             try
             {
                 {
-                    var sql = "SELECT username, userid from securityuser where deletedon IS NULL";
+                    var sql =
+                      "SELECT LTRIM(RTRIM(CONCAT(sd.firstname, ' ', sd.lastname, ' - ', cr.name))) AS username, " +
+                      "su.userid " +
+                      "FROM securityuser su " +
+                      "JOIN securityuserdetail sd ON sd.userdetailid = su.userdetailid " +
+                      "JOIN cfgrole cr ON cr.role_id = sd.roleid " +
+                      "WHERE su.deletedon IS NULL";
+
 
                     using (var reader = _dataLayer.ExecuteDataReader(sql))
                     {

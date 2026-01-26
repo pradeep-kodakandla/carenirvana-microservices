@@ -173,72 +173,114 @@ namespace CareNirvana.Service.Infrastructure.Repository
         public async Task<List<AuthDetailRow>> GetAuthsByMemberAsync(int memberDetailsId, bool includeDeleted = false)
         {
             const string sql = @"
-                with auth_status as (
-                  select
-                      (s->>'id')::int as AuthStatusId,
-                      s->>'authStatus' as AuthStatusText,
-                      coalesce((s->>'activeFlag')::boolean, false) as ActiveFlag
-                  from cfgadmindata c
-                  cross join lateral jsonb_array_elements(c.jsoncontent->'authstatus') s
-                  where c.module = 'UM'
-                )
-                select
-                    a.authdetailid as AuthDetailId,
-                    a.authnumber as AuthNumber,
-                    a.authtypeid as AuthTypeId,
-                    at.authtemplatename as AuthTemplateName,
-                    a.memberdetailsid as MemberDetailsId,
-                    a.authduedate as AuthDueDate,
-                    a.nextreviewdate as NextReviewDate,
-                    a.treatementtype as TreatementType,
-                    a.data::text as DataJson,
-                    a.createdon as CreatedOn,
-                    a.createdby as CreatedBy,
-                    a.updatedon as UpdatedOn,
-                    a.updatedby as UpdatedBy,
-                    a.deletedon as DeletedOn,
-                    a.deletedby as DeletedBy,
-                    a.authclassid as AuthClassId,
-                    a.authassignedto as AuthAssignedTo,
-                    a.authstatus as AuthStatus,
-                    st.AuthStatusText as AuthStatusText,
-                    su.username as CreatedByUserName,
-                    md.memberid as MemberId,
-                    (coalesce(md.firstname,'') ||
-                      case when md.lastname is null or md.lastname = '' then '' else ' ' || md.lastname end
-                    ) as MemberName,
-                    coalesce(wg.is_assigned, false) as IsWorkgroupAssigned,
-                    (coalesce(wg.is_assigned, false) = true and coalesce(wg.any_accept, false) = false) as IsWorkgroupPending
+                WITH admin AS (
+                      SELECT jsoncontent::jsonb AS j
+                      FROM cfgadmindata
+                      WHERE module = 'UM'
+                      ORDER BY COALESCE(updatedon, createdon) DESC NULLS LAST
+                      LIMIT 1
+                    ),
+                    auth_status AS (
+                      SELECT
+                        (s->>'id')::int AS authstatusid,
+                        s->>'authStatus' AS authstatustext,
+                        COALESCE((s->>'activeFlag')::boolean, false) AS activeflag
+                      FROM admin
+                      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(admin.j->'authstatus', '[]'::jsonb)) s
+                    ),
+                    auth_treatment AS (
+                      SELECT
+                        (s->>'id')::int AS treatmentid,
+                        s->>'treatmentType' AS treatmenttext
+                      FROM admin
+                      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(admin.j->'treatmenttype', '[]'::jsonb)) s
+                    ),
+                    auth_priority AS (
+                      SELECT
+                        (s->>'id')::int AS priorityid,
+                        s->>'requestPriority' AS requestprioritytext
+                      FROM admin
+                      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(admin.j->'requestpriority', '[]'::jsonb)) s
+                    )
+                    SELECT
+                      a.authdetailid AS ""AuthDetailId"",
+                      a.authnumber AS ""AuthNumber"",
+                      a.authtypeid AS ""AuthTypeId"",
+                      tmpl.authtemplatename AS ""AuthTemplateName"",
+                      a.memberdetailsid AS ""MemberDetailsId"",
 
-                from authdetail a
-                left join cfgauthtemplate at on at.authtemplateid = a.authtypeid
-                left join securityuser su on su.userid = a.createdby
-                left join memberdetails md on md.memberdetailsid = a.memberdetailsid
-                left join auth_status st
-                       on st.AuthStatusId = a.authstatus
-                      and st.ActiveFlag = true
-               left join lateral (
-                    select
-                        (count(*) > 0) as is_assigned,
-                        array_remove(array_agg(awg.workgroupworkbasketid order by awg.createdon desc), null) as wgwb_ids,
+                      COALESCE(a.authduedate, a.createdon + interval '10 days') AS ""AuthDueDate"",
+
+                      COALESCE(ar.nextreviewdate, a.nextreviewdate) AS ""NextReviewDate"",
+
+                      tt.treatmenttext AS ""TreatementType"",
+                      ap.requestprioritytext AS ""RequestPriority"",
+                      NULL::text AS ""DataJson"",
+                      a.createdon AS ""CreatedOn"",
+                      a.createdby AS ""CreatedBy"",
+                      a.updatedon AS ""UpdatedOn"",
+                      a.updatedby AS ""UpdatedBy"",
+                      a.deletedon AS ""DeletedOn"",
+                      a.deletedby AS ""DeletedBy"",
+                      a.authclassid AS ""AuthClassId"",
+                      a.authassignedto AS ""AuthAssignedTo"",
+                      a.authstatus AS ""AuthStatus"",
+                      st.authstatustext AS ""AuthStatusText"",
+                      su.username AS ""CreatedByUserName"",
+                      md.memberid AS ""MemberId"",
+                      (COALESCE(md.firstname,'') ||
+                        CASE
+                          WHEN md.lastname IS NULL OR md.lastname = '' THEN ''
+                          ELSE ' ' || md.lastname
+                        END
+                      ) AS ""MemberName"",
+                      COALESCE(wg.is_assigned, false) AS ""IsWorkgroupAssigned"",
+                      (COALESCE(wg.is_assigned, false) = true AND COALESCE(wg.any_accept, false) = false) AS ""IsWorkgroupPending""
+
+                    FROM authdetail a
+                    LEFT JOIN cfgauthtemplate tmpl ON tmpl.authtemplateid = a.authtypeid
+                    LEFT JOIN securityuser su ON su.userid = a.createdby
+                    LEFT JOIN memberdetails md ON md.memberdetailsid = a.memberdetailsid
+                    LEFT JOIN auth_status st
+                      ON st.authstatusid = a.authstatus
+                     AND st.activeflag = true
+                    LEFT JOIN auth_treatment tt
+                      ON tt.treatmentid = a.treatementtype::int
+
+                    LEFT JOIN auth_priority ap ON ap.priorityid::text = (a.data::jsonb ->> 'requestSent')
+                    LEFT JOIN LATERAL (
+                      SELECT MIN(aa.followupdatetime) AS nextreviewdate
+                      FROM authactivity aa
+                      WHERE aa.authdetailid = a.authdetailid
+                        AND aa.referto IS NOT NULL
+                        AND aa.followupdatetime IS NOT NULL
+                    ) ar ON true
+
+                    LEFT JOIN LATERAL (
+                      SELECT
+                        (COUNT(*) > 0) AS is_assigned,
+                        array_remove(array_agg(awg.workgroupworkbasketid ORDER BY awg.createdon DESC), NULL) AS wgwb_ids,
                         bool_or(
-                            exists (
-                                select 1
-                                from authworkgroupaction awa
-                                where awa.authworkgroupid = awg.authworkgroupid
-                                  and awa.activeflag = true
-                                  and upper(awa.actiontype) = 'ACCEPT'
-                            )
-                        ) as any_accept
-                    from authworkgroup awg
-                    where awg.authdetailid = a.authdetailid
-                      and awg.requesttype = 'AUTH'
-                      and awg.activeflag = true
-                ) wg on true
+                          EXISTS (
+                            SELECT 1
+                            FROM authworkgroupaction awa
+                            WHERE awa.authworkgroupid = awg.authworkgroupid
+                              AND awa.activeflag = true
+                              AND upper(awa.actiontype) = 'ACCEPT'
+                          )
+                        ) AS any_accept
+                      FROM authworkgroup awg
+                      WHERE awg.authdetailid = a.authdetailid
+                        AND awg.requesttype = 'AUTH'
+                        AND awg.activeflag = true
+                    ) wg ON true
 
                 where a.memberdetailsid = @memberDetailsId
                   and (@includeDeleted = true or a.deletedon is null)
                 order by a.createdon desc;";
+
+
+
 
 
             await using var conn = CreateConn();

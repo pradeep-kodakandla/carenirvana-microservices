@@ -10,7 +10,8 @@ namespace CareNirvana.Service.Domain.Model
         public int MemberDetailsId { get; set; }
         public DateTime? AuthDueDate { get; set; }
         public DateTime? NextReviewDate { get; set; }
-        public string? TreatementType { get; set; } // keeping DB spelling
+        public string? TreatementType { get; set; }
+        public string? RequestPriority { get; set; }
         public string? DataJson { get; set; }       // data::text
         public DateTime CreatedOn { get; set; }
         public int? CreatedBy { get; set; }

@@ -1,7 +1,9 @@
 ﻿using CareNirvana.Service.Application.Interfaces;
 using CareNirvana.Service.Domain.Model;
 using Microsoft.AspNetCore.Mvc;
+using System.Diagnostics;
 using System.Text.Json;
+using static CareNirvana.Service.Infrastructure.Repository.RulesEngineRepository;
 
 namespace CareNirvana.Service.Api.Controllers
 {
@@ -215,6 +217,128 @@ namespace CareNirvana.Service.Api.Controllers
             };
 
             return Ok(dto);
+        }
+
+        [HttpPost("executetrigger")]
+        public async Task<ActionResult<ExecuteTriggerResponse>> ExecuteTrigger([FromBody] ExecuteTriggerRequest req)
+        {
+            var correlationId = Guid.NewGuid();
+            var sw = Stopwatch.StartNew();
+
+            string status = "NO_MATCH";
+            bool matched = false;
+            long? matchedRuleId = null;
+            string? matchedRuleName = null;
+            var outputs = new Dictionary<string, string?>();
+
+            long? triggerId = null;
+            int? moduleId = req.ModuleId;
+            var evaluatedRuleIds = new List<long>();
+
+            string requestJson = JsonSerializer.Serialize(req);
+            string? responseJson = null;
+            string? errorMessage = null;
+
+            try
+            {
+                var mapped = await _repo.GetActiveRulesForTriggerAsync(req.TriggerKey);
+                if (mapped.Count == 0)
+                {
+                    status = "NO_MATCH";
+                }
+                else
+                {
+                    triggerId = mapped[0].TriggerId;
+                    moduleId ??= mapped[0].ModuleId;
+
+                    foreach (var row in mapped)
+                    {
+                        evaluatedRuleIds.Add(row.RuleId);
+
+                        var (m, o) = DecisionTableEvaluator.Evaluate(row.RuleJson, req.Facts);
+                        if (m)
+                        {
+                            matched = true;
+                            matchedRuleId = row.RuleId;
+                            matchedRuleName = row.RuleName;
+                            outputs = o;
+                            status = "SUCCESS";
+
+                            if (row.StopOnMatch) break;
+                        }
+                    }
+                }
+
+                var resp = new ExecuteTriggerResponse(
+                    correlationId,
+                    req.TriggerKey,
+                    status,
+                    matched,
+                    matchedRuleId,
+                    matchedRuleName,
+                    outputs
+                );
+
+                responseJson = JsonSerializer.Serialize(resp);
+                return Ok(resp);
+            }
+            catch (Exception ex)
+            {
+                status = "ERROR";
+                errorMessage = ex.Message;
+
+                var resp = new ExecuteTriggerResponse(
+                    correlationId,
+                    req.TriggerKey,
+                    status,
+                    false,
+                    null,
+                    null,
+                    new Dictionary<string, string?>()
+                );
+
+                responseJson = JsonSerializer.Serialize(resp);
+                return BadRequest(resp);
+            }
+            finally
+            {
+                sw.Stop();
+
+                try
+                {
+                    await _repo.InsertRuleExecutionLogAsync(new
+                    {
+                        CorrelationId = correlationId,
+                        TriggerId = triggerId,
+                        TriggerKey = req.TriggerKey,
+                        ModuleId = moduleId,
+                        RequestedUserId = req.RequestedUserId,
+                        ClientApp = req.ClientApp,
+                        ClientIp = HttpContext.Connection.RemoteIpAddress?.ToString(),
+                        UserAgent = Request.Headers.UserAgent.ToString(),
+
+                        AuthId = req.AuthId,
+                        MemberId = req.MemberId,
+                        PatientId = req.PatientId,
+                        ServiceRequestId = req.ServiceRequestId,
+
+                        RequestJson = requestJson,
+                        ResponseJson = responseJson ?? "{}",
+                        Status = status,
+                        MatchedRuleId = matchedRuleId,
+                        MatchedRuleName = matchedRuleName,
+                        EvaluatedRuleIds = evaluatedRuleIds.ToArray(),
+                        ResponseTimeMs = (int)sw.ElapsedMilliseconds,
+                        ErrorMessage = errorMessage
+                    });
+                }
+                catch (Exception logEx)
+                {
+                    // don't fail runtime evaluation due to logging
+                    Debug.WriteLine("Rule execution log failed: " + logEx);
+                }
+            }
+
         }
     }
 }

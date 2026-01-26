@@ -279,6 +279,7 @@ namespace CareNirvana.Service.Domain.Model
 
         public DateTime? LastDetailOn { get; set; }
 
+        public string? CaseCategoryText { get; set; }
         public bool IsWorkgroupAssigned { get; set; }
         public bool IsWorkgroupPending { get; set; }
         public int[]? AssignedWorkgroupWorkbasketIds { get; set; }

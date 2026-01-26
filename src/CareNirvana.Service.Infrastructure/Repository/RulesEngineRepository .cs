@@ -98,8 +98,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 set isdeleted = true, deletedat = now(), deletedby = @UserId
                 where rulegroupid = @Id and isdeleted = false;";
 
-                    using var db = Conn();
-                    await db.ExecuteAsync(sql, new { Id = id, UserId = userId });
+            using var db = Conn();
+            await db.ExecuteAsync(sql, new { Id = id, UserId = userId });
         }
 
 
@@ -571,6 +571,155 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
             using var db = Conn();
             return await db.QuerySingleAsync<RulesDashboardCountsRow>(sql);
+        }
+
+
+
+        public async Task<IReadOnlyList<TriggerRuleRow>> GetActiveRulesForTriggerAsync(string triggerKey)
+        {
+            const string sql = @"
+                  select
+                    t.triggerid as TriggerId,
+                    t.triggerkey as TriggerKey,
+                    t.moduleid as ModuleId,
+
+                    r.ruleid as RuleId,
+                    r.rulename as RuleName,
+                    r.ruletype as RuleType,
+                    r.rulejson::text as RuleJson,
+
+                    m.sequence as Sequence,
+                    m.stop_on_match as StopOnMatch
+                  from rulesengine.cfgruletrigger t
+                  join rulesengine.cfgruletriggermap m
+                    on m.triggerid = t.triggerid
+                   and m.activeflag = true
+                  join rulesengine.cfgrule r
+                    on r.ruleid = m.ruleid
+                   and r.activeflag = true
+                   and r.deletedon is null
+                  where t.triggerkey = @TriggerKey
+                    and t.activeflag = true
+                    and t.deletedon is null
+                  order by m.sequence asc;";
+
+            using var db = Conn();
+            var rows = await db.QueryAsync<TriggerRuleRow>(sql, new { TriggerKey = triggerKey });
+            return rows.AsList();
+        }
+
+        public async Task InsertRuleExecutionLogAsync(object logRow)
+        {
+            const string sql = @"
+              insert into rulesengine.cfgruleexecutionlog
+              (
+                correlationid, triggerid, triggerkey, moduleid,
+                requesteduserid, clientapp, clientip, useragent,
+                authid, memberid, patientid, servicerequestid,
+                requestjson, responsejson,
+                status, matchedruleid, matchedrulename, evaluatedruleids,
+                receivedon, responsetime_ms, errormessage
+              )
+              values
+              (
+                @CorrelationId, @TriggerId, @TriggerKey, @ModuleId,
+                @RequestedUserId, @ClientApp, @ClientIp, @UserAgent,
+                @AuthId, @MemberId, @PatientId, @ServiceRequestId,
+                @RequestJson::jsonb, @ResponseJson::jsonb,
+                @Status, @MatchedRuleId, @MatchedRuleName, @EvaluatedRuleIds,
+                now(), @ResponseTimeMs, @ErrorMessage
+              );";
+
+            using var db = Conn();
+            await db.ExecuteAsync(sql, logRow);
+        }
+
+
+
+        public static class DecisionTableEvaluator
+        {
+            public static (bool Matched, Dictionary<string, string?> Outputs) Evaluate(string ruleJson, JsonElement facts)
+            {
+                using var doc = JsonDocument.Parse(ruleJson);
+                var root = doc.RootElement;
+
+                // Expecting root.engine.rules[] like your JSON
+                if (!root.TryGetProperty("engine", out var eng) ||
+                    !eng.TryGetProperty("rules", out var rulesElem) ||
+                    rulesElem.ValueKind != JsonValueKind.Array)
+                {
+                    return (false, new Dictionary<string, string?>());
+                }
+
+                // hitPolicy FIRST: iterate by priority asc (fallback to large number)
+                var rules = rulesElem.EnumerateArray()
+                    .Where(r => r.TryGetProperty("enabled", out var en) && en.ValueKind == JsonValueKind.True)
+                    .OrderBy(r => r.TryGetProperty("priority", out var p) && p.TryGetInt32(out var pv) ? pv : int.MaxValue)
+                    .ToList();
+
+                foreach (var r in rules)
+                {
+                    if (!r.TryGetProperty("when", out var when) ||
+                        !when.TryGetProperty("all", out var all) ||
+                        all.ValueKind != JsonValueKind.Array)
+                        continue;
+
+                    bool ok = true;
+
+                    foreach (var c in all.EnumerateArray())
+                    {
+                        var fieldPath = c.GetProperty("fieldPath").GetString() ?? "";
+                        var op = c.GetProperty("operator").GetString() ?? "";
+                        var expected = c.GetProperty("value").GetString() ?? "";
+
+                        var actualElem = TryGetByPath(facts, fieldPath);
+                        var actual = actualElem.HasValue ? actualElem.Value.ToString() : "";
+
+                        if (op == "EQ")
+                        {
+                            if (!string.Equals(actual, expected, StringComparison.Ordinal))
+                            {
+                                ok = false;
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            // extend operators later (NEQ, IN, etc.)
+                            ok = false;
+                            break;
+                        }
+                    }
+
+                    if (ok)
+                    {
+                        if (r.TryGetProperty("then", out var thenObj) && thenObj.ValueKind == JsonValueKind.Object)
+                        {
+                            var outputs = new Dictionary<string, string?>();
+                            foreach (var prop in thenObj.EnumerateObject())
+                                outputs[prop.Name] = prop.Value.ValueKind == JsonValueKind.Null ? null : prop.Value.ToString();
+
+                            return (true, outputs);
+                        }
+
+                        return (true, new Dictionary<string, string?>());
+                    }
+                }
+
+                return (false, new Dictionary<string, string?>());
+            }
+
+            private static JsonElement? TryGetByPath(JsonElement root, string path)
+            {
+                var cur = root;
+                foreach (var part in path.Split('.', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    if (cur.ValueKind != JsonValueKind.Object) return null;
+                    if (!cur.TryGetProperty(part, out var next)) return null;
+                    cur = next;
+                }
+                return cur;
+            }
         }
 
     }

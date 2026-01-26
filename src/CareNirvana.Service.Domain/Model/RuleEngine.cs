@@ -1,9 +1,5 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Text.Json;
-using System.Threading.Tasks;
+﻿using System.Text.Json;
+
 
 namespace CareNirvana.Service.Domain.Model
 {
@@ -194,5 +190,45 @@ namespace CareNirvana.Service.Domain.Model
         public long DataFunctionsTotal { get; set; }
         public long DataFunctionsActive { get; set; }
     }
+
+
+
+    public sealed record ExecuteTriggerRequest(
+        string TriggerKey,
+        JsonElement Facts,
+        long? RequestedUserId = null,
+        int? ModuleId = null,
+        string? ClientApp = null,
+        long? AuthId = null,
+        long? MemberId = null,
+        long? PatientId = null,
+        long? ServiceRequestId = null
+    );
+
+    public sealed record ExecuteTriggerResponse(
+        Guid CorrelationId,
+        string TriggerKey,
+        string Status, // SUCCESS / NO_MATCH / ERROR
+        bool Matched,
+        long? MatchedRuleId,
+        string? MatchedRuleName,
+        Dictionary<string, string?> Outputs
+    );
+
+    public sealed class TriggerRuleRow
+    {
+        public long TriggerId { get; set; }
+        public string TriggerKey { get; set; } = "";
+        public int ModuleId { get; set; }
+
+        public long RuleId { get; set; }
+        public string RuleName { get; set; } = "";
+        public string RuleType { get; set; } = "";
+        public string RuleJson { get; set; } = "{}";
+
+        public int Sequence { get; set; }
+        public bool StopOnMatch { get; set; }
+    }
+
 
 }

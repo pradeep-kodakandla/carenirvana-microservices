@@ -639,7 +639,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     aa.activitytypeid,
                     at.activitytype,
                     aa.referto,
-                    su.username,
+                    LTRIM(RTRIM(CONCAT(sd.firstname, ' ', sd.lastname, ' - ', cr.name))) as username,
                     aa.followupdatetime,
                     aa.duedate,
                     aa.statusid,
@@ -649,7 +649,9 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 from authactivity aa
                 join authdetail ad on ad.authdetailid = aa.authdetailid
                 join memberdetails md on md.memberdetailsid = ad.memberdetailsid
-                join securityuser su on su.userid = aa.referto
+                join securityuser su on su.userid = aa.referto and su.deletedon IS NULL
+                JOIN securityuserdetail sd ON sd.userdetailid = su.userdetailid
+                JOIN cfgrole cr ON cr.role_id= sd.roleid
                 left join lateral (
                     select elem->>'activityType' as activitytype
                     from cfgadmindata cad,
@@ -674,7 +676,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     ma.activitytypeid,
                     at2.activitytype,
                     ma.referto,
-                    su2.username,
+                    LTRIM(RTRIM(CONCAT(sd.firstname, ' ', sd.lastname, ' - ', cr.name))) username,
                     ma.followupdatetime,
                     ma.duedate,
                     ma.statusid,
@@ -683,7 +685,9 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     ma.memberactivityid as activityid
                 FROM memberactivity ma
                 JOIN memberdetails md ON md.memberdetailsid = ma.memberdetailsid
-                JOIN securityuser su2 ON su2.userid = ma.referto
+                JOIN securityuser su2 ON su2.userid = ma.referto and su2.deletedon IS NULL
+                JOIN securityuserdetail sd ON sd.userdetailid = su2.userdetailid
+                JOIN cfgrole cr ON cr.role_id= sd.roleid
                 LEFT JOIN LATERAL(
                     SELECT elem->> 'activityType' AS activitytype
                     FROM cfgadmindata cad,
@@ -1106,7 +1110,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     aa.activitytypeid,
                     at.activitytype,
                     aa.referto,
-                    su.username,
+                    LTRIM(RTRIM(CONCAT(sd.firstname, ' ', sd.lastname, ' - ', cr.name))) as username,
                     aa.followupdatetime,
                     aa.duedate,
                     aa.statusid,
@@ -1117,7 +1121,9 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 from authactivity aa
                 join authdetail ad on ad.authdetailid = aa.authdetailid
                 join memberdetails md on md.memberdetailsid = ad.memberdetailsid
-                join securityuser su on su.userid = aa.referto
+                join securityuser su on su.userid = aa.referto and su.deletedon IS NULL
+                JOIN securityuserdetail sd ON sd.userdetailid = su.userdetailid
+                JOIN cfgrole cr ON cr.role_id= sd.roleid
                 left join lateral (
                     select elem->>'activityType' as activitytype
                     from cfgadmindata cad,
@@ -1230,11 +1236,11 @@ namespace CareNirvana.Service.Infrastructure.Repository
         }
 
         public async Task<int> UpdateAuthActivityLinesAsync(
-    IEnumerable<int> lineIds,
-    string status,
-    string mdDecision,
-    string? mdNotes,
-    int reviewedByUserId)
+            IEnumerable<int> lineIds,
+            string status,
+            string mdDecision,
+            string? mdNotes,
+            int reviewedByUserId)
         {
             if (lineIds == null) return 0;
 
@@ -1839,6 +1845,13 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                   SELECT (x ->> 'id') AS id, (x ->> 'casePriority') AS casepriority_name
                                   FROM admin
                                   CROSS JOIN LATERAL jsonb_array_elements(admin.j -> 'casepriority') x
+                                ),
+                                casecategory_lu AS (
+                                  SELECT
+                                    (x ->> 'id')            AS id,
+                                    (x ->> 'caseCategory')  AS casecategory_name
+                                  FROM admin
+                                  CROSS JOIN LATERAL jsonb_array_elements(COALESCE(admin.j -> 'casecategory', '[]'::jsonb)) x
                                 )
                                 SELECT
                                   ch.casenumber                                  AS ""CaseNumber"",
@@ -1851,7 +1864,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                   COALESCE(ct.casetype_name, ch.casetype::text)  AS ""CaseTypeText"",
                                   concat_ws(' ', md.firstname, md.lastname)      AS ""MemberName"",
                                   md.memberid                                    AS ""MemberId"",
-                                  su.username                                    AS ""CreatedByUserName"",
+                                  LTRIM(RTRIM(CONCAT(sd.firstname, ' ', sd.lastname, ' - ', cr.name))) AS ""CreatedByUserName"",
                                   ch.createdby                                   AS ""CreatedBy"",
                                   ch.createdon                                   AS ""CreatedOn"",
                                   cd.caselevelid                                 AS ""CaseLevelId"",
@@ -1862,8 +1875,12 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                                                                 AS ""ReceivedDateTime"",
                                   (cd.jsondata::jsonb ->> 'Case_Status_Details_caseStatus') AS ""CaseStatusId"",
                                   COALESCE(cs.casestatus_name,
-                                           (cd.jsondata::jsonb ->> 'Case_Status_Details_caseStatus')) AS ""CaseStatusText"",
-                                  COALESCE(cd.updatedon, cd.createdon)            AS ""LastDetailOn""
+                                  (cd.jsondata::jsonb ->> 'Case_Status_Details_caseStatus')) AS ""CaseStatusText"",
+                                  COALESCE(cd.updatedon, cd.createdon)            AS ""LastDetailOn"",
+                                  COALESCE(
+                                    cc.casecategory_name,
+                                    (cd.jsondata::jsonb ->> 'Case_Overview_caseCategory')
+                                  ) AS ""CaseCategoryText""
                                 FROM caseheader ch
                                 JOIN LATERAL (
                                   SELECT d.*
@@ -1876,10 +1893,13 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                 ) cd ON TRUE
                                 JOIN memberdetails md ON md.memberdetailsid = ch.memberdetailid
                                 JOIN cfgcasetemplate cct on cct.casetemplateid = ch.casetype::int
-                                JOIN securityuser  su ON su.userid = ch.createdby
+                                JOIN securityuser su ON su.userid = ch.createdby and su.deletedon IS NULL
+                                JOIN securityuserdetail sd ON sd.userdetailid = su.userdetailid
+                                JOIN cfgrole cr ON cr.role_id= sd.roleid
                                 LEFT JOIN casetype_lu    ct ON ct.id = ch.casetype::text
                                 LEFT JOIN casestatus_lu  cs ON cs.id = (cd.jsondata::jsonb ->> 'Case_Status_Details_caseStatus')
                                 LEFT JOIN casepriority_lu cp ON cp.id = (cd.jsondata::jsonb ->> 'Case_Overview_casePriority')
+                                LEFT JOIN casecategory_lu cc ON cc.id = (cd.jsondata::jsonb ->> 'Case_Overview_caseCategory')
                                 WHERE ch.createdby = @UserId
                                 ORDER BY COALESCE(cd.updatedon, cd.createdon) DESC NULLS LAST;
                                 ";

@@ -57,5 +57,12 @@ namespace CareNirvana.Service.Application.Interfaces
 
         Task<RulesDashboardCountsRow> GetDashboardCountsAsync();
 
+
+
+
+        Task<IReadOnlyList<TriggerRuleRow>> GetActiveRulesForTriggerAsync(string triggerKey);
+        Task InsertRuleExecutionLogAsync(object logRow);
+
+
     }
 }
