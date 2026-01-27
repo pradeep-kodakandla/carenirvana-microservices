@@ -46,8 +46,12 @@ namespace CareNirvana.Service.Infrastructure.Repository
             var iv = "encryptionIntVec";       // Also ensure the IV is exactly 16 characters
 
             var decryptedPassword = DecryptPassword(password, secretKey, iv);
+            var sql = "SELECT userid, su.userdetailid, LTRIM(RTRIM(CONCAT(sd.firstname, ' ', sd.lastname, ' - ', cr.name))) AS username, password FROM securityuser su" +
+                " JOIN securityuserdetail sd ON sd.userdetailid = su.userdetailid" +
+                " JOIN cfgrole cr ON cr.role_id = sd.roleid" +
+                " WHERE LOWER(username) = LOWER(@username) AND password=@password AND su.activeflag=true AND su.deletedon IS NULL";
 
-            var sql = "SELECT userid, userdetailid, username, password FROM securityuser WHERE LOWER(username) = LOWER(@username) AND password=@password AND activeflag=true";
+            //var sql = "SELECT userid, userdetailid, username, password FROM securityuser WHERE LOWER(username) = LOWER(@username) AND password=@password AND activeflag=true";
             var parameters = new Dictionary<string, object>
             {
                 { "@username", username },

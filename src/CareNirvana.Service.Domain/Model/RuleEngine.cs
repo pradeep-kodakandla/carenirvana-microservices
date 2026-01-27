@@ -78,9 +78,10 @@ namespace CareNirvana.Service.Domain.Model
 
     public sealed class DecisionTableListDto
     {
-        public string Id { get; set; } = "";                 // uniquedecisiontableid
-        public string Name { get; set; } = "";               // ruledecisiontablename
-        public string Status { get; set; } = "";             // deploymentstatus
+        public string Id { get; set; } = "";                 
+        public string Name { get; set; } = "";               
+        public string Status { get; set; } = "";
+        public string HitPolicy { get; set; } = "";
         public int Version { get; set; }
         public DateTimeOffset UpdatedOn { get; set; }
         public bool ActiveFlag { get; set; } = true;
@@ -230,5 +231,25 @@ namespace CareNirvana.Service.Domain.Model
         public bool StopOnMatch { get; set; }
     }
 
+    public sealed class RuleActionDto
+    {
+        public long Id { get; set; }
+        public string Name { get; set; } = "";
+        public string? Description { get; set; }
+
+        // Store jsonb as text (same style as RuleJson/DecisionTableJson patterns)
+        public string? ActionJson { get; set; }
+
+        public bool ActiveFlag { get; set; }
+
+        public DateTimeOffset CreatedOn { get; set; }
+        public long? CreatedBy { get; set; }
+
+        public DateTimeOffset? UpdatedOn { get; set; }
+        public long? UpdatedBy { get; set; }
+
+        public DateTimeOffset? DeletedOn { get; set; }
+        public long? DeletedBy { get; set; }
+    }
 
 }

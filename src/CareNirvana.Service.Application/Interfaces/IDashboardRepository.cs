@@ -28,5 +28,7 @@ namespace CareNirvana.Service.Application.Interfaces
 
         Task<IEnumerable<MemberSearchResultDto>> SearchMembersAsync(MemberSearchCriteriaDto criteria);
         Task<IReadOnlyList<AgCaseRow>> GetAgCasesAsync(int userId, CancellationToken ct = default);
+
+        Task<MemberDetailsResponseDto?> GetMemberDetailsAsync(int memberDetailsId);
     }
 }

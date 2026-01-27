@@ -192,4 +192,13 @@ public class DashBoardController : ControllerBase
         var results = await _dashBoardService.GetAgCasesAsync(userId, ct);
         return Ok(results);
     }
+
+    [HttpGet("memberdetails/{memberDetailsId:int}")]
+    public async Task<ActionResult<MemberDetailsResponseDto>> Get(int memberDetailsId)
+    {
+        var result = await _dashBoardService.GetMemberDetailsAsync(memberDetailsId);
+        if (result is null) return NotFound();
+
+        return Ok(result);
+    }
 }

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
 using System.Text.Json;
+using System.Globalization;
 
 namespace CareNirvana.Service.Infrastructure.Repository
 {
@@ -211,6 +212,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                   uniquedecisiontableid as Id,
                   ruledecisiontablename as Name,
                   deploymentstatus as Status,
+                    hitpolicy as HitPolicy,         
                   version,
                   coalesce(updatedon, createdon) as UpdatedOn,
                   activeflag as ActiveFlag
@@ -634,8 +636,6 @@ namespace CareNirvana.Service.Infrastructure.Repository
             await db.ExecuteAsync(sql, logRow);
         }
 
-
-
         public static class DecisionTableEvaluator
         {
             public static (bool Matched, Dictionary<string, string?> Outputs) Evaluate(string ruleJson, JsonElement facts)
@@ -675,17 +675,13 @@ namespace CareNirvana.Service.Infrastructure.Repository
                         var actualElem = TryGetByPath(facts, fieldPath);
                         var actual = actualElem.HasValue ? actualElem.Value.ToString() : "";
 
-                        if (op == "EQ")
+                        var opRaw = c.GetProperty("operator").GetString() ?? "";
+
+                        var dataType = c.TryGetProperty("dataType", out var dtEl) ? dtEl.GetString() : null;
+
+
+                        if (!Compare(actual, expected, opRaw, dataType))
                         {
-                            if (!string.Equals(actual, expected, StringComparison.Ordinal))
-                            {
-                                ok = false;
-                                break;
-                            }
-                        }
-                        else
-                        {
-                            // extend operators later (NEQ, IN, etc.)
                             ok = false;
                             break;
                         }
@@ -709,6 +705,79 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 return (false, new Dictionary<string, string?>());
             }
 
+            private static bool Compare(string actual, string expected, string opRaw, string? dataType)
+            {
+                var op = (opRaw ?? "").Trim().ToUpperInvariant();
+
+                // normalize common variants from UI
+                if (op == "=" || op == "==") op = "EQ";
+                if (op == "!=" || op == "<>") op = "NEQ";
+
+                // equality
+                if (op == "EQ") return string.Equals(actual, expected, StringComparison.Ordinal);
+                if (op == "NEQ") return !string.Equals(actual, expected, StringComparison.Ordinal);
+
+                // try DATE compare (works even if dataType is "string")
+                if (TryParseDate(actual, out var ad) && TryParseDate(expected, out var ed))
+                    return CompareI(ad, ed, op);
+
+                // try NUMERIC compare
+                if (decimal.TryParse(actual, NumberStyles.Any, CultureInfo.InvariantCulture, out var an) &&
+                    decimal.TryParse(expected, NumberStyles.Any, CultureInfo.InvariantCulture, out var en))
+                    return CompareI(an, en, op);
+
+                // fallback: ordinal string compare for >,<,>=,<=
+                var cmp = string.CompareOrdinal(actual, expected);
+                return op switch
+                {
+                    "GT" or ">" => cmp > 0,
+                    "GTE" or ">=" => cmp >= 0,
+                    "LT" or "<" => cmp < 0,
+                    "LTE" or "<=" => cmp <= 0,
+                    _ => false
+                };
+            }
+
+            private static bool CompareI<T>(T a, T e, string op) where T : IComparable<T>
+            {
+                var cmp = a.CompareTo(e);
+                return op switch
+                {
+                    "GT" or ">" => cmp > 0,
+                    "GTE" or ">=" => cmp >= 0,
+                    "LT" or "<" => cmp < 0,
+                    "LTE" or "<=" => cmp <= 0,
+                    _ => false
+                };
+            }
+
+            private static bool TryParseDate(string s, out DateTime dt)
+            {
+                dt = default;
+                if (string.IsNullOrWhiteSpace(s)) return false;
+
+                // common formats your rules use: 1/1/2026
+                var formats = new[]
+                {
+        "M/d/yyyy", "MM/dd/yyyy",
+        "M/d/yy",   "MM/dd/yy",
+        "yyyy-MM-dd",
+        "yyyy-MM-ddTHH:mm:ss",
+        "yyyy-MM-ddTHH:mm:ssZ",
+        "yyyy-MM-ddTHH:mm:ss.fff",
+        "yyyy-MM-ddTHH:mm:ss.fffZ"
+    };
+
+                if (DateTime.TryParseExact(s.Trim(), formats, CultureInfo.InvariantCulture,
+                        DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                        out dt))
+                    return true;
+
+                // last resort
+                return DateTime.TryParse(s.Trim(), CultureInfo.InvariantCulture,
+                    DateTimeStyles.AllowWhiteSpaces | DateTimeStyles.AssumeUniversal | DateTimeStyles.AdjustToUniversal,
+                    out dt);
+            }
             private static JsonElement? TryGetByPath(JsonElement root, string path)
             {
                 var cur = root;
@@ -721,6 +790,365 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 return cur;
             }
         }
+
+
+        /// </summary>
+        public static async Task<(bool Matched, Dictionary<string, string?> Outputs)> EvaluateAsync(
+            string ruleJson,
+            JsonElement facts,
+            Func<string, Task<string?>> loadDecisionTableJsonByIdAsync,
+            IDictionary<string, string?>? cache = null)
+        {
+            // 1) Already compiled ruledoc (engine.rules)
+            if (LooksExecutableRuleDoc(ruleJson))
+                return DecisionTableEvaluator.Evaluate(ruleJson, facts);
+
+            // 2) Resolve pointer rule -> decision table JSON by id
+            var dtId = TryGetDecisionTableId(ruleJson);
+            if (string.IsNullOrWhiteSpace(dtId))
+                return (false, new Dictionary<string, string?>());
+
+            string? resolvedJson = null;
+
+            if (cache != null &&
+                cache.TryGetValue(dtId, out var cached) &&
+                !string.IsNullOrWhiteSpace(cached))
+            {
+                resolvedJson = cached;
+            }
+            else
+            {
+                resolvedJson = await loadDecisionTableJsonByIdAsync(dtId);
+                if (cache != null) cache[dtId] = resolvedJson;
+            }
+
+            if (string.IsNullOrWhiteSpace(resolvedJson))
+                return (false, new Dictionary<string, string?>());
+
+            // 3) If resolved DT is compiled ruledoc -> use your existing evaluator
+            if (LooksExecutableRuleDoc(resolvedJson))
+                return DecisionTableEvaluator.Evaluate(resolvedJson, facts);
+
+            // 4) If resolved DT is RulesDesigner format (rows/columns) -> evaluate directly
+            if (LooksDesignerDecisionTable(resolvedJson))
+                return EvaluateDesignerDecisionTable(resolvedJson, facts);
+
+            // Unknown shape
+            return (false, new Dictionary<string, string?>());
+        }
+
+        private static (bool Matched, Dictionary<string, string?> Outputs) EvaluateDesignerDecisionTable(
+    string dtJson,
+    JsonElement facts)
+        {
+            using var doc = JsonDocument.Parse(dtJson);
+            var root = doc.RootElement;
+
+            var columns = root.GetProperty("columns");
+            var rows = root.GetProperty("rows");
+
+            // Gather enabled condition/result columns
+            var conditionCols = new List<JsonElement>();
+            var resultCols = new List<JsonElement>();
+
+            foreach (var c in columns.EnumerateArray())
+            {
+                var enabled = c.TryGetProperty("isEnabled", out var en) && en.ValueKind == JsonValueKind.True;
+                if (!enabled) continue;
+
+                var kind = c.TryGetProperty("kind", out var k) ? k.GetString() : null;
+                if (string.Equals(kind, "condition", StringComparison.OrdinalIgnoreCase))
+                    conditionCols.Add(c);
+                else if (string.Equals(kind, "result", StringComparison.OrdinalIgnoreCase))
+                    resultCols.Add(c);
+            }
+
+            // FIRST hit policy: evaluate rows in table order
+            foreach (var row in rows.EnumerateArray())
+            {
+                var rowEnabled = row.TryGetProperty("enabled", out var re) && re.ValueKind == JsonValueKind.True;
+                if (!rowEnabled) continue;
+
+                if (!row.TryGetProperty("cells", out var cells) || cells.ValueKind != JsonValueKind.Object)
+                    continue;
+
+                bool ok = true;
+
+                // Check all conditions
+                foreach (var col in conditionCols)
+                {
+                    var colId = col.GetProperty("id").GetString() ?? "";
+                    var expected = GetCellString(cells, colId);
+
+                    // Blank cell = wildcard
+                    if (string.IsNullOrWhiteSpace(expected))
+                        continue;
+
+                    var actual = GetFactValueForColumn(facts, col);
+
+                    if (!string.Equals(actual ?? "", expected, StringComparison.Ordinal))
+                    {
+                        ok = false;
+                        break;
+                    }
+                }
+
+                if (!ok) continue;
+
+                // Build outputs from result columns
+                var outputs = new Dictionary<string, string?>(StringComparer.Ordinal);
+                foreach (var col in resultCols)
+                {
+                    var colId = col.GetProperty("id").GetString() ?? "";
+                    var outKey = col.TryGetProperty("key", out var keyEl) ? keyEl.GetString() : null;
+                    if (string.IsNullOrWhiteSpace(outKey)) continue;
+
+                    outputs[outKey!] = GetCellString(cells, colId);
+                }
+
+                return (true, outputs);
+            }
+
+            return (false, new Dictionary<string, string?>());
+        }
+
+        private static string? GetCellString(JsonElement cellsObj, string colId)
+        {
+            if (cellsObj.ValueKind != JsonValueKind.Object) return null;
+            if (!cellsObj.TryGetProperty(colId, out var v)) return null;
+            return v.ValueKind == JsonValueKind.Null ? null : v.ToString();
+        }
+
+        /// <summary>
+        /// Builds a fact path from mappedFieldPath + label.
+        /// Example:
+        ///   mappedFieldPath = "memberDetails", label="Member Program" -> memberDetails.memberProgram
+        ///   mappedFieldPath = "authClass", label="Auth Class" -> authClass
+        ///   mappedFieldPath missing, label="Anchor Source" -> anchorSource
+        /// </summary>
+        private static string? GetFactValueForColumn(JsonElement facts, JsonElement col)
+        {
+            var basePath = col.TryGetProperty("mappedFieldPath", out var mp) ? mp.GetString() : null;
+            var label = col.TryGetProperty("label", out var l) ? l.GetString() : null;
+
+            var leaf = ToCamelCase(label ?? "");
+            if (string.IsNullOrWhiteSpace(leaf))
+                leaf = col.TryGetProperty("key", out var k) ? k.GetString() : null;
+
+            var candidates = new List<string>();
+
+            if (!string.IsNullOrWhiteSpace(basePath))
+            {
+                // if base already looks like a leaf (authClass/authType), keep it
+                if (string.Equals(basePath, leaf, StringComparison.OrdinalIgnoreCase) || basePath!.Contains('.'))
+                    candidates.Add(basePath!);
+                else
+                    candidates.Add($"{basePath}.{leaf}");
+
+                // fallback: base alone
+                candidates.Add(basePath!);
+            }
+
+            if (!string.IsNullOrWhiteSpace(leaf))
+                candidates.Add(leaf!);
+
+            foreach (var path in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                var elem = TryGetByPath(facts, path);
+                if (elem is null) continue;
+
+                // If object, try to pick a useful scalar
+                if (elem.Value.ValueKind == JsonValueKind.Object)
+                {
+                    // prefer leaf prop if present
+                    if (!string.IsNullOrWhiteSpace(leaf) &&
+                        elem.Value.TryGetProperty(leaf!, out var leafVal) &&
+                        leafVal.ValueKind != JsonValueKind.Object &&
+                        leafVal.ValueKind != JsonValueKind.Array)
+                        return leafVal.ToString();
+
+                    // if single-property object, use its value
+                    var props = elem.Value.EnumerateObject().ToList();
+                    if (props.Count == 1)
+                        return props[0].Value.ToString();
+
+                    // otherwise: object -> string (unlikely match)
+                    return elem.Value.ToString();
+                }
+
+                return elem.Value.ToString();
+            }
+
+            return null;
+        }
+
+        private static string ToCamelCase(string label)
+        {
+            if (string.IsNullOrWhiteSpace(label)) return "";
+
+            var parts = label
+                .Split(new[] { ' ', '-', '_' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(p => p.Trim())
+                .Where(p => p.Length > 0)
+                .ToList();
+
+            if (parts.Count == 0) return "";
+
+            var first = parts[0].ToLowerInvariant();
+            for (int i = 1; i < parts.Count; i++)
+            {
+                var p = parts[i].ToLowerInvariant();
+                parts[i] = char.ToUpperInvariant(p[0]) + p.Substring(1);
+            }
+
+            return first + string.Concat(parts.Skip(1));
+        }
+
+        private static JsonElement? TryGetByPath(JsonElement root, string path)
+        {
+            var cur = root;
+            foreach (var part in path.Split('.', StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (cur.ValueKind != JsonValueKind.Object) return null;
+                if (!cur.TryGetProperty(part, out var next)) return null;
+                cur = next;
+            }
+            return cur;
+        }
+
+
+        private static bool LooksExecutableRuleDoc(string json)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                return root.TryGetProperty("engine", out var eng) &&
+                       eng.TryGetProperty("rules", out var rulesElem) &&
+                       rulesElem.ValueKind == JsonValueKind.Array;
+            }
+            catch { return false; }
+        }
+
+        private static bool LooksDesignerDecisionTable(string json)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                return root.TryGetProperty("rows", out var rows) && rows.ValueKind == JsonValueKind.Array &&
+                       root.TryGetProperty("columns", out var cols) && cols.ValueKind == JsonValueKind.Array;
+            }
+            catch { return false; }
+        }
+
+
+
+        private static string? GetString(JsonElement root, params string[] path)
+        {
+            var cur = root;
+            foreach (var p in path)
+            {
+                if (cur.ValueKind != JsonValueKind.Object) return null;
+                if (!cur.TryGetProperty(p, out var next)) return null;
+                cur = next;
+            }
+            if (cur.ValueKind == JsonValueKind.String) return cur.GetString();
+            return cur.ValueKind == JsonValueKind.Null ? null : cur.ToString();
+        }
+
+        private static bool LooksExecutable(string json)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                return root.TryGetProperty("engine", out var eng) &&
+                       eng.TryGetProperty("rules", out var rulesElem) &&
+                       rulesElem.ValueKind == JsonValueKind.Array;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private static string? TryGetDecisionTableId(string json)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+
+                if (root.TryGetProperty("ui", out var ui) &&
+                    ui.TryGetProperty("decisionTable", out var dt) &&
+                    dt.TryGetProperty("id", out var idElem) &&
+                    idElem.ValueKind == JsonValueKind.String)
+                {
+                    return idElem.GetString();
+                }
+
+                return null;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+
+
+        public async Task<IReadOnlyList<RuleActionDto>> GetRuleActionsAsync(bool? activeOnly = null)
+        {
+            const string sql = @"
+        select
+          ruleactionid as Id,
+          ruleactionname as Name,
+          ruleactiondescription as Description,
+          actionjson::text as ActionJson,
+          activeflag as ActiveFlag,
+          createdon as CreatedOn,
+          createdby as CreatedBy,
+          updatedon as UpdatedOn,
+          updatedby as UpdatedBy,
+          deletedon as DeletedOn,
+          deletedby as DeletedBy
+        from rulesengine.cfgruleaction
+        where deletedon is null
+          and (@ActiveOnly is null or activeflag = @ActiveOnly)
+        order by ruleactionid desc;";
+
+            using var db = Conn();
+            var rows = await db.QueryAsync<RuleActionDto>(sql, new { ActiveOnly = activeOnly });
+            return rows.AsList();
+        }
+
+        public async Task<RuleActionDto?> GetRuleActionAsync(long id)
+        {
+            const string sql = @"
+        select
+          ruleactionid as Id,
+          ruleactionname as Name,
+          ruleactiondescription as Description,
+          actionjson::text as ActionJson,
+          activeflag as ActiveFlag,
+          createdon as CreatedOn,
+          createdby as CreatedBy,
+          updatedon as UpdatedOn,
+          updatedby as UpdatedBy,
+          deletedon as DeletedOn,
+          deletedby as DeletedBy
+        from rulesengine.cfgruleaction
+        where ruleactionid = @Id
+          and deletedon is null;";
+
+            using var db = Conn();
+            return await db.QueryFirstOrDefaultAsync<RuleActionDto>(sql, new { Id = id });
+        }
+
 
     }
 }

@@ -64,5 +64,7 @@ namespace CareNirvana.Service.Application.Interfaces
         Task InsertRuleExecutionLogAsync(object logRow);
 
 
+        Task<IReadOnlyList<RuleActionDto>> GetRuleActionsAsync(bool? activeOnly = null);
+        Task<RuleActionDto?> GetRuleActionAsync(long id);
     }
 }

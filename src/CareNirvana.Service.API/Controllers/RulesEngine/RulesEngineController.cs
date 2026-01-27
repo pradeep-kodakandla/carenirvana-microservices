@@ -1,5 +1,6 @@
 ﻿using CareNirvana.Service.Application.Interfaces;
 using CareNirvana.Service.Domain.Model;
+using CareNirvana.Service.Infrastructure.Repository;
 using Microsoft.AspNetCore.Mvc;
 using System.Diagnostics;
 using System.Text.Json;
@@ -239,6 +240,9 @@ namespace CareNirvana.Service.Api.Controllers
             string? responseJson = null;
             string? errorMessage = null;
 
+            // cache decisionTableId -> decisionTableJson for this request (avoid repeated DB hits)
+            var dtCache = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+
             try
             {
                 var mapped = await _repo.GetActiveRulesForTriggerAsync(req.TriggerKey);
@@ -255,7 +259,14 @@ namespace CareNirvana.Service.Api.Controllers
                     {
                         evaluatedRuleIds.Add(row.RuleId);
 
-                        var (m, o) = DecisionTableEvaluator.Evaluate(row.RuleJson, req.Facts);
+                        // IMPORTANT: supports both "full DT JSON" and "pointer DT JSON"
+                        var (m, o) = await RulesEngineRepository.EvaluateAsync(
+                            row.RuleJson,
+                            req.Facts,
+                            _repo.GetDecisionTableJsonAsync,
+                            dtCache
+                        );
+
                         if (m)
                         {
                             matched = true;
@@ -334,11 +345,24 @@ namespace CareNirvana.Service.Api.Controllers
                 }
                 catch (Exception logEx)
                 {
-                    // don't fail runtime evaluation due to logging
                     Debug.WriteLine("Rule execution log failed: " + logEx);
                 }
             }
-
         }
+
+
+        // GET api/rulesengine/ruleactions?activeOnly=true|false
+        [HttpGet("ruleactions")]
+        public async Task<ActionResult<IReadOnlyList<RuleActionDto>>> GetRuleActions([FromQuery] bool? activeOnly = null)
+            => Ok(await _repo.GetRuleActionsAsync(activeOnly));
+
+        // GET api/rulesengine/ruleactions/{id}
+        [HttpGet("ruleactions/{id:long}")]
+        public async Task<ActionResult<RuleActionDto>> GetRuleAction(long id)
+        {
+            var row = await _repo.GetRuleActionAsync(id);
+            return row == null ? NotFound() : Ok(row);
+        }
+
     }
 }

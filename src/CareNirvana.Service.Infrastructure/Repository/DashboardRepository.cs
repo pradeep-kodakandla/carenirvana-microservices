@@ -7,6 +7,7 @@ using NpgsqlTypes;
 using System.Collections.Generic;
 using System.Data;
 using System.Net.NetworkInformation;
+using System.Text.Json;
 using static System.Net.Mime.MediaTypeNames;
 
 namespace CareNirvana.Service.Infrastructure.Repository
@@ -1911,6 +1912,440 @@ namespace CareNirvana.Service.Infrastructure.Repository
             //var rows = await conn.QueryAsync<AgCaseRow>(cmd);
             return rows.AsList();
         }
+
+
+        public async Task<MemberDetailsResponseDto?> GetMemberDetailsAsync(int memberDetailsId)
+        {
+            const string sql = @"
+                    WITH
+                    cfg_cm AS (
+                      SELECT jsoncontent::jsonb AS jc
+                      FROM cfgadmindata
+                      WHERE module = 'CM'
+                      ORDER BY COALESCE(updatedon, createdon) DESC NULLS LAST
+                      LIMIT 1
+                    ),
+                    cfg_admin AS (
+                      SELECT jsoncontent::jsonb AS jc
+                      FROM cfgadmindata
+                      WHERE module = 'ADMIN'
+                      ORDER BY COALESCE(updatedon, createdon) DESC NULLS LAST
+                      LIMIT 1
+                    ),
+
+                    address_type_lu AS (
+                      SELECT (x->>'id')::int AS id, x->>'addressType' AS name
+                      FROM cfg_cm
+                      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(cfg_cm.jc->'addresstype','[]'::jsonb)) x
+                    ),
+                    phone_type_lu AS (
+                      SELECT (x->>'id')::int AS id,
+                             COALESCE(x->>'phoneTypeDisplayName', x->>'phoneTypeName') AS name
+                      FROM cfg_cm
+                      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(cfg_cm.jc->'phonetype','[]'::jsonb)) x
+                    ),
+                    language_type_lu AS (
+                      SELECT (x->>'id')::int AS id, x->>'languageType' AS name
+                      FROM cfg_cm
+                      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(cfg_cm.jc->'languagetype','[]'::jsonb)) x
+                    ),
+                    email_type_lu AS (
+                      SELECT (x->>'id')::int AS id, x->>'emailType' AS name
+                      FROM cfg_cm
+                      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(cfg_cm.jc->'emailtype','[]'::jsonb)) x
+                    ),
+
+                    gender_lu AS (
+                      SELECT (x->>'id')::int AS id, x->>'gender' AS name
+                      FROM cfg_admin
+                      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(cfg_admin.jc->'gender','[]'::jsonb)) x
+                    ),
+                    race_lu AS (
+                      SELECT (x->>'id')::int AS id,
+                             COALESCE(x->>'race', x->>'raceName', x->>'name') AS name
+                      FROM cfg_admin
+                      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(cfg_admin.jc->'race','[]'::jsonb)) x
+                    )
+
+                    SELECT
+                        m.memberdetailsid,
+                        m.organizationid,
+                        m.memberid,
+                        m.prefix,
+                        m.firstname,
+                        m.middlename,
+                        m.lastname,
+                        m.suffix,
+                        m.preferredfirstname,
+                        m.preferredlastname,
+                        m.preferredmiddlename,
+                        m.genderid,
+                        m.genderidentityid,
+                        m.sexualorientationid,
+                        m.preferredpronounsid,
+                        m.birthdate,
+                        m.deathdate,
+                        m.causeofdeathid,
+                        m.actualplaceofdeathid,
+                        m.preferredcontactformatid,
+                        m.raceid,
+                        m.preferredraceid,
+                        m.ethnicityid,
+                        m.preferredethnicityid,
+                        m.residencestatusid,
+                        m.incomestatusid,
+                        m.maritalstatusid,
+                        m.veteranstatusid,
+                        m.issensitivediagnosis,
+                        m.timezoneid,
+                        m.isdonotcall,
+                        m.multiplebirthrankid,
+                        m.activeflag,
+                        m.createdon,
+                        m.createdby,
+                        m.updatedon,
+                        m.updatedby,
+
+                        -- NEW: display values for top-level gender/race
+                        g.name AS gender,
+                        r.name AS race,
+
+                    -- NOTE: cast jsonb -> text so GetString always works
+                    COALESCE((
+                        SELECT jsonb_agg(
+                            jsonb_build_object(
+                                'memberadditionaldetailsid', mad.memberadditionaldetailsid,
+                                'additionalfieldid',        mad.additionalfieldid,
+                                'additionaldetailtext',     mad.additionaldetailtext,
+                                'activeflag',               mad.activeflag,
+                                'createdon',                mad.createdon,
+                                'createdby',                mad.createdby,
+                                'updatedon',                mad.updatedon,
+                                'updatedby',                mad.updatedby,
+                                'values',                   COALESCE((
+                                    SELECT jsonb_agg(
+                                        jsonb_build_object(
+                                            'memberadditionaldetailvalueid', mav.memberadditionaldetailvalueid,
+                                            'additionalfieldvalueid',        mav.additionalfieldvalueid,
+                                            'additionalfieldvaluetext',      mav.additionalfieldvaluetext,
+                                            'activeflag',                    mav.activeflag,
+                                            'createdon',                     mav.createdon,
+                                            'createdby',                     mav.createdby,
+                                            'updatedon',                     mav.updatedon,
+                                            'updatedby',                     mav.updatedby
+                                        )
+                                    )
+                                    FROM memberadditionaldetailvalue mav
+                                    WHERE mav.memberadditionaldetailid = mad.memberadditionaldetailsid
+                                      AND mav.deletedon IS NULL
+                                ), '[]'::jsonb)
+                            )
+                        )
+                        FROM memberadditionaldetail mad
+                        WHERE mad.memberdetailsid = m.memberdetailsid
+                          AND mad.deletedon IS NULL
+                    ), '[]'::jsonb)::text AS memberadditionaldetails,
+
+                     -- Addresses: add addresstype name
+                        COALESCE((
+                            SELECT jsonb_agg(jsonb_build_object(
+                                'memberaddressid', ma.memberaddressid,
+                                'addresstypeid',   ma.addresstypeid,
+                                'addresstype',     atl.name,
+                                'addressline1',    ma.addressline1,
+                                'addressline2',    ma.addressline2,
+                                'addressline3',    ma.addressline3,
+                                'city',            ma.city,
+                                'countyid',        ma.countyid,
+                                'stateid',         ma.stateid,
+                                'country',         ma.country,
+                                'zipcode',         ma.zipcode,
+                                'isprimary',       ma.isprimary,
+                                'ispreferred',     ma.ispreferred,
+                                'isprivacy',       ma.isprivacy,
+                                'boroughid',       ma.boroughid,
+                                'islandid',        ma.islandid,
+                                'regionid',        ma.regionid,
+                                'activeflag',      ma.activeflag,
+                                'createdon',       ma.createdon,
+                                'createdby',       ma.createdby,
+                                'updatedon',       ma.updatedon,
+                                'updatedby',       ma.updatedby
+                            ))
+                            FROM memberaddress ma
+                            LEFT JOIN address_type_lu atl ON atl.id = ma.addresstypeid
+                            WHERE ma.memberdetailsid = m.memberdetailsid
+                              AND ma.deletedon IS NULL
+                        ), '[]'::jsonb)::text AS memberaddresses,
+
+                        -- Emails: add emailtype name
+                        COALESCE((
+                            SELECT jsonb_agg(jsonb_build_object(
+                                'memberemailid', me.memberemailid,
+                                'emailtypeid',   me.emailtypeid,
+                                'emailtype',     etl.name,
+                                'emailaddress',  me.emailaddress,
+                                'isprimary',     me.isprimary,
+                                'activeflag',    me.activeflag,
+                                'createdon',     me.createdon,
+                                'createdby',     me.createdby,
+                                'updatedon',     me.updatedon,
+                                'updatedby',     me.updatedby
+                            ))
+                            FROM memberemail me
+                            LEFT JOIN email_type_lu etl ON etl.id = me.emailtypeid
+                            WHERE me.memberdetailsid = m.memberdetailsid
+                              AND me.deletedon IS NULL
+                        ), '[]'::jsonb)::text AS memberemails,
+
+                        -- Phones: add phonetype name
+                        COALESCE((
+                            SELECT jsonb_agg(jsonb_build_object(
+                                'memberphonenumberid', mp.memberphonenumberid,
+                                'phonetypeid',         mp.phonetypeid,
+                                'phonetype',           ptl.name,
+                                'phonenumber',         mp.phonenumber,
+                                'extension',           mp.extension,
+                                'isprimary',           mp.isprimary,
+                                'ispreferred',         mp.ispreferred,
+                                'activeflag',          mp.activeflag,
+                                'createdon',           mp.createdon,
+                                'createdby',           mp.createdby,
+                                'updatedon',           mp.updatedon,
+                                'updatedby',           mp.updatedby
+                            ))
+                            FROM memberphonenumber mp
+                            LEFT JOIN phone_type_lu ptl ON ptl.id = mp.phonetypeid
+                            WHERE mp.memberdetailsid = m.memberdetailsid
+                              AND mp.deletedon IS NULL
+                        ), '[]'::jsonb)::text AS memberphonenumbers,
+
+                    COALESCE((
+                        SELECT jsonb_agg(jsonb_build_object(
+                            'membercommunicationimpairmentid', mci.membercommunicationimpairmentid,
+                            'communicationimpairmentid',       mci.communicationimpairmentid,
+                            'activeflag',                      mci.activeflag,
+                            'createdon',                       mci.createdon,
+                            'createdby',                       mci.createdby,
+                            'updatedon',                       mci.updatedon,
+                            'updatedby',                       mci.updatedby
+                        ))
+                        FROM membercommunicationimpairment mci
+                        WHERE mci.memberdetailsid = m.memberdetailsid
+                          AND mci.deletedon IS NULL
+                    ), '[]'::jsonb)::text AS membercommunicationimpairments,
+
+                    COALESCE((
+                        SELECT jsonb_agg(jsonb_build_object(
+                            'memberevacuationzoneid', mez.memberevacuationzoneid,
+                            'evacuationzoneid',       mez.evacuationzoneid,
+                            'activeflag',             mez.activeflag,
+                            'createdon',              mez.createdon,
+                            'createdby',              mez.createdby,
+                            'updatedon',              mez.updatedon,
+                            'updatedby',              mez.updatedby
+                        ))
+                        FROM memberevacuationzone mez
+                        WHERE mez.memberdetailsid = m.memberdetailsid
+                          AND mez.deletedon IS NULL
+                    ), '[]'::jsonb)::text AS memberevacuationzones,
+
+                    COALESCE((
+                        SELECT jsonb_agg(jsonb_build_object(
+                            'memberidentifierid', mi.memberidentifierid,
+                            'identifierid',       mi.identifierid,
+                            'identifiervalue',    mi.identifiervalue,
+                            'activeflag',         mi.activeflag,
+                            'createdon',          mi.createdon,
+                            'createdby',          mi.createdby,
+                            'updatedon',          mi.updatedon,
+                            'updatedby',          mi.updatedby
+                        ))
+                        FROM memberidentifier mi
+                        WHERE mi.memberdetailsid = m.memberdetailsid
+                          AND mi.deletedon IS NULL
+                    ), '[]'::jsonb)::text AS memberidentifiers,
+
+                     -- Languages: add languagetype name
+                        COALESCE((
+                            SELECT jsonb_agg(jsonb_build_object(
+                                'memberlanguageid', ml.memberlanguageid,
+                                'languageid',       ml.languageid,
+                                'languagetypeid',   ml.languagetypeid,
+                                'languagetype',     ltl.name,
+                                'isprimary',        ml.isprimary,
+                                'activeflag',       ml.activeflag,
+                                'createdon',        ml.createdon,
+                                'createdby',        ml.createdby,
+                                'updatedon',        ml.updatedon,
+                                'updatedby',        ml.updatedby
+                            ))
+                            FROM memberlanguage ml
+                            LEFT JOIN language_type_lu ltl ON ltl.id = ml.languagetypeid
+                            WHERE ml.memberdetailsid = m.memberdetailsid
+                              AND ml.deletedon IS NULL
+                        ), '[]'::jsonb)::text AS memberlanguages,
+
+                    COALESCE((
+                        SELECT jsonb_agg(jsonb_build_object(
+                            'memberportalaccessid', mpa.memberportalaccessid,
+                            'isregistered',         mpa.isregistered,
+                            'issuspended',          mpa.issuspended,
+                            'activeflag',           mpa.activeflag,
+                            'createdon',            mpa.createdon,
+                            'createdby',            mpa.createdby,
+                            'updatedon',            mpa.updatedon,
+                            'updatedby',            mpa.updatedby
+                        ))
+                        FROM memberportalaccess mpa
+                        WHERE mpa.memberdetailsid = m.memberdetailsid
+                          AND mpa.deletedon IS NULL
+                    ), '[]'::jsonb)::text AS memberportalaccesses,
+
+                    COALESCE((
+                        SELECT jsonb_agg(jsonb_build_object(
+                            'memberpreferredtimeofcallid', mpt.memberpreferredtimeofcallid,
+                            'dayid',                        mpt.dayid,
+                            'timeid',                       mpt.timeid,
+                            'starttimeid',                  mpt.starttimeid,
+                            'endtimeid',                    mpt.endtimeid,
+                            'activeflag',                   mpt.activeflag,
+                            'createdon',                    mpt.createdon,
+                            'createdby',                    mpt.createdby,
+                            'updatedon',                    mpt.updatedon,
+                            'updatedby',                    mpt.updatedby
+                        ))
+                        FROM memberpreferredtimeofcall mpt
+                        WHERE mpt.memberdetailsid = m.memberdetailsid
+                          AND mpt.deletedon IS NULL
+                    ), '[]'::jsonb)::text AS memberpreferredtimeofcalls,
+
+                    COALESCE((
+                        SELECT jsonb_agg(jsonb_build_object(
+                            'memberserviceinterruptionid', msi.memberserviceinterruptionid,
+                            'serviceinterruptionid',       msi.serviceinterruptionid,
+                            'facilityname',                msi.facilityname,
+                            'startdate',                   msi.startdate,
+                            'enddate',                     msi.enddate,
+                            'activeflag',                  msi.activeflag,
+                            'createdon',                   msi.createdon,
+                            'createdby',                   msi.createdby,
+                            'updatedon',                   msi.updatedon,
+                            'updatedby',                   msi.updatedby
+                        ))
+                        FROM memberserviceinterruption msi
+                        WHERE msi.memberdetailsid = m.memberdetailsid
+                          AND msi.deletedon IS NULL
+                    ), '[]'::jsonb)::text AS memberserviceinterruptions
+
+                FROM memberdetails m
+                LEFT JOIN gender_lu g ON g.id = m.genderid
+                LEFT JOIN race_lu   r ON r.id = m.raceid
+                WHERE m.memberdetailsid = @memberDetailsId
+                  AND m.deletedon IS NULL;";
+
+            using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+
+            using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@memberDetailsId", memberDetailsId);
+
+            using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SingleRow);
+            if (!await reader.ReadAsync())
+                return null;
+
+            // base fields
+            var dto = new MemberDetailsResponseDto
+            {
+                MemberDetailsId = reader.GetInt32(reader.GetOrdinal("memberdetailsid")),
+                OrganizationId = reader.IsDBNull(reader.GetOrdinal("organizationid")) ? null : reader.GetInt32(reader.GetOrdinal("organizationid")),
+                MemberId = reader.IsDBNull(reader.GetOrdinal("memberid")) ? null : reader.GetInt32(reader.GetOrdinal("memberid")),
+
+                Prefix = reader.IsDBNull(reader.GetOrdinal("prefix")) ? null : reader.GetString(reader.GetOrdinal("prefix")),
+                FirstName = reader.IsDBNull(reader.GetOrdinal("firstname")) ? null : reader.GetString(reader.GetOrdinal("firstname")),
+                MiddleName = reader.IsDBNull(reader.GetOrdinal("middlename")) ? null : reader.GetString(reader.GetOrdinal("middlename")),
+                LastName = reader.IsDBNull(reader.GetOrdinal("lastname")) ? null : reader.GetString(reader.GetOrdinal("lastname")),
+                Suffix = reader.IsDBNull(reader.GetOrdinal("suffix")) ? null : reader.GetString(reader.GetOrdinal("suffix")),
+
+                PreferredFirstName = reader.IsDBNull(reader.GetOrdinal("preferredfirstname")) ? null : reader.GetString(reader.GetOrdinal("preferredfirstname")),
+                PreferredLastName = reader.IsDBNull(reader.GetOrdinal("preferredlastname")) ? null : reader.GetString(reader.GetOrdinal("preferredlastname")),
+                PreferredMiddleName = reader.IsDBNull(reader.GetOrdinal("preferredmiddlename")) ? null : reader.GetString(reader.GetOrdinal("preferredmiddlename")),
+
+                GenderId = reader.IsDBNull(reader.GetOrdinal("genderid")) ? null : reader.GetInt32(reader.GetOrdinal("genderid")),
+                GenderIdentityId = reader.IsDBNull(reader.GetOrdinal("genderidentityid")) ? null : reader.GetInt32(reader.GetOrdinal("genderidentityid")),
+                SexualOrientationId = reader.IsDBNull(reader.GetOrdinal("sexualorientationid")) ? null : reader.GetInt32(reader.GetOrdinal("sexualorientationid")),
+                PreferredPronounsId = reader.IsDBNull(reader.GetOrdinal("preferredpronounsid")) ? null : reader.GetInt32(reader.GetOrdinal("preferredpronounsid")),
+
+                BirthDate = reader.IsDBNull(reader.GetOrdinal("birthdate")) ? null : reader.GetDateTime(reader.GetOrdinal("birthdate")),
+                DeathDate = reader.IsDBNull(reader.GetOrdinal("deathdate")) ? null : reader.GetDateTime(reader.GetOrdinal("deathdate")),
+                CauseOfDeathId = reader.IsDBNull(reader.GetOrdinal("causeofdeathid")) ? null : reader.GetInt32(reader.GetOrdinal("causeofdeathid")),
+                ActualPlaceOfDeathId = reader.IsDBNull(reader.GetOrdinal("actualplaceofdeathid")) ? null : reader.GetInt32(reader.GetOrdinal("actualplaceofdeathid")),
+                PreferredContactFormatId = reader.IsDBNull(reader.GetOrdinal("preferredcontactformatid")) ? null : reader.GetInt32(reader.GetOrdinal("preferredcontactformatid")),
+
+                RaceId = reader.IsDBNull(reader.GetOrdinal("raceid")) ? null : reader.GetInt32(reader.GetOrdinal("raceid")),
+                PreferredRaceId = reader.IsDBNull(reader.GetOrdinal("preferredraceid")) ? null : reader.GetInt32(reader.GetOrdinal("preferredraceid")),
+                EthnicityId = reader.IsDBNull(reader.GetOrdinal("ethnicityid")) ? null : reader.GetInt32(reader.GetOrdinal("ethnicityid")),
+                PreferredEthnicityId = reader.IsDBNull(reader.GetOrdinal("preferredethnicityid")) ? null : reader.GetInt32(reader.GetOrdinal("preferredethnicityid")),
+
+                ResidenceStatusId = reader.IsDBNull(reader.GetOrdinal("residencestatusid")) ? null : reader.GetInt32(reader.GetOrdinal("residencestatusid")),
+                IncomeStatusId = reader.IsDBNull(reader.GetOrdinal("incomestatusid")) ? null : reader.GetInt32(reader.GetOrdinal("incomestatusid")),
+                MaritalStatusId = reader.IsDBNull(reader.GetOrdinal("maritalstatusid")) ? null : reader.GetInt32(reader.GetOrdinal("maritalstatusid")),
+                VeteranStatusId = reader.IsDBNull(reader.GetOrdinal("veteranstatusid")) ? null : reader.GetInt32(reader.GetOrdinal("veteranstatusid")),
+
+                IsSensitiveDiagnosis = reader.IsDBNull(reader.GetOrdinal("issensitivediagnosis")) ? null : reader.GetBoolean(reader.GetOrdinal("issensitivediagnosis")),
+                TimeZoneId = reader.IsDBNull(reader.GetOrdinal("timezoneid")) ? null : reader.GetInt32(reader.GetOrdinal("timezoneid")),
+                IsDoNotCall = reader.IsDBNull(reader.GetOrdinal("isdonotcall")) ? null : reader.GetBoolean(reader.GetOrdinal("isdonotcall")),
+                MultipleBirthRankId = reader.IsDBNull(reader.GetOrdinal("multiplebirthrankid")) ? null : reader.GetInt32(reader.GetOrdinal("multiplebirthrankid")),
+
+                ActiveFlag = reader.IsDBNull(reader.GetOrdinal("activeflag")) ? null : reader.GetBoolean(reader.GetOrdinal("activeflag")),
+                CreatedOn = reader.IsDBNull(reader.GetOrdinal("createdon")) ? null : reader.GetDateTime(reader.GetOrdinal("createdon")),
+                CreatedBy = reader.IsDBNull(reader.GetOrdinal("createdby")) ? null : reader.GetInt32(reader.GetOrdinal("createdby")),
+                UpdatedOn = reader.IsDBNull(reader.GetOrdinal("updatedon")) ? null : reader.GetDateTime(reader.GetOrdinal("updatedon")),
+                UpdatedBy = reader.IsDBNull(reader.GetOrdinal("updatedby")) ? null : reader.GetInt32(reader.GetOrdinal("updatedby")),
+            };
+            dto.Gender = reader.IsDBNull(reader.GetOrdinal("gender")) ? null : reader.GetString(reader.GetOrdinal("gender"));
+            dto.Race = reader.IsDBNull(reader.GetOrdinal("race")) ? null : reader.GetString(reader.GetOrdinal("race"));
+
+            // nested json arrays
+            var jsonOpts = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+
+            dto.MemberAdditionalDetails = JsonSerializer.Deserialize<List<MemberAdditionalDetailDto>>(
+                reader.GetString(reader.GetOrdinal("memberadditionaldetails")), jsonOpts) ?? new();
+
+            dto.MemberAddresses = JsonSerializer.Deserialize<List<MemberAddressDto>>(
+                reader.GetString(reader.GetOrdinal("memberaddresses")), jsonOpts) ?? new();
+
+            dto.MemberEmails = JsonSerializer.Deserialize<List<MemberEmailDto>>(
+                reader.GetString(reader.GetOrdinal("memberemails")), jsonOpts) ?? new();
+
+            dto.MemberPhoneNumbers = JsonSerializer.Deserialize<List<MemberPhoneNumberDto>>(
+                reader.GetString(reader.GetOrdinal("memberphonenumbers")), jsonOpts) ?? new();
+
+            dto.MemberCommunicationImpairments = JsonSerializer.Deserialize<List<MemberCommunicationImpairmentDto>>(
+                reader.GetString(reader.GetOrdinal("membercommunicationimpairments")), jsonOpts) ?? new();
+
+            dto.MemberEvacuationZones = JsonSerializer.Deserialize<List<MemberEvacuationZoneDto>>(
+                reader.GetString(reader.GetOrdinal("memberevacuationzones")), jsonOpts) ?? new();
+
+            dto.MemberIdentifiers = JsonSerializer.Deserialize<List<MemberIdentifierDto>>(
+                reader.GetString(reader.GetOrdinal("memberidentifiers")), jsonOpts) ?? new();
+
+            dto.MemberLanguages = JsonSerializer.Deserialize<List<MemberLanguageDto>>(
+                reader.GetString(reader.GetOrdinal("memberlanguages")), jsonOpts) ?? new();
+
+            dto.MemberPortalAccesses = JsonSerializer.Deserialize<List<MemberPortalAccessDto>>(
+                reader.GetString(reader.GetOrdinal("memberportalaccesses")), jsonOpts) ?? new();
+
+            dto.MemberPreferredTimeOfCalls = JsonSerializer.Deserialize<List<MemberPreferredTimeOfCallDto>>(
+                reader.GetString(reader.GetOrdinal("memberpreferredtimeofcalls")), jsonOpts) ?? new();
+
+            dto.MemberServiceInterruptions = JsonSerializer.Deserialize<List<MemberServiceInterruptionDto>>(
+                reader.GetString(reader.GetOrdinal("memberserviceinterruptions")), jsonOpts) ?? new();
+
+            return dto;
+        }
+
+
     }
 
 

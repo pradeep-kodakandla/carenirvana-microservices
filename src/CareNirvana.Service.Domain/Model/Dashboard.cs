@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
+﻿using System.Text.Json.Serialization;
 using System.Threading.Tasks;
 
 namespace CareNirvana.Service.Domain.Model
@@ -286,5 +283,270 @@ namespace CareNirvana.Service.Domain.Model
 
     }
 
+
+
+    public sealed class MemberDetailsResponseDto
+    {
+        public int MemberDetailsId { get; set; }
+        public int? OrganizationId { get; set; }
+        public int? MemberId { get; set; }
+
+        public string? Prefix { get; set; }
+        public string? FirstName { get; set; }
+        public string? MiddleName { get; set; }
+        public string? LastName { get; set; }
+        public string? Suffix { get; set; }
+
+        public string? PreferredFirstName { get; set; }
+        public string? PreferredLastName { get; set; }
+        public string? PreferredMiddleName { get; set; }
+        public string? Gender { get; set; }
+        public string? Race { get; set; }
+        public int? GenderId { get; set; }
+        public int? GenderIdentityId { get; set; }
+        public int? SexualOrientationId { get; set; }
+        public int? PreferredPronounsId { get; set; }
+
+        public DateTime? BirthDate { get; set; }
+        public DateTime? DeathDate { get; set; }
+        public int? CauseOfDeathId { get; set; }
+        public int? ActualPlaceOfDeathId { get; set; }
+
+        public int? PreferredContactFormatId { get; set; }
+
+        public int? RaceId { get; set; }
+        public int? PreferredRaceId { get; set; }
+        public int? EthnicityId { get; set; }
+        public int? PreferredEthnicityId { get; set; }
+
+        public int? ResidenceStatusId { get; set; }
+        public int? IncomeStatusId { get; set; }
+        public int? MaritalStatusId { get; set; }
+        public int? VeteranStatusId { get; set; }
+
+        public bool? IsSensitiveDiagnosis { get; set; }
+        public int? TimeZoneId { get; set; }
+        public bool? IsDoNotCall { get; set; }
+        public int? MultipleBirthRankId { get; set; }
+
+        public bool? ActiveFlag { get; set; }
+        public DateTime? CreatedOn { get; set; }
+        public int? CreatedBy { get; set; }
+        public DateTime? UpdatedOn { get; set; }
+        public int? UpdatedBy { get; set; }
+
+        public List<MemberAdditionalDetailDto> MemberAdditionalDetails { get; set; } = new();
+        public List<MemberAddressDto> MemberAddresses { get; set; } = new();
+        public List<MemberEmailDto> MemberEmails { get; set; } = new();
+        public List<MemberPhoneNumberDto> MemberPhoneNumbers { get; set; } = new();
+        public List<MemberCommunicationImpairmentDto> MemberCommunicationImpairments { get; set; } = new();
+        public List<MemberEvacuationZoneDto> MemberEvacuationZones { get; set; } = new();
+        public List<MemberIdentifierDto> MemberIdentifiers { get; set; } = new();
+        public List<MemberLanguageDto> MemberLanguages { get; set; } = new();
+        public List<MemberPortalAccessDto> MemberPortalAccesses { get; set; } = new();
+        public List<MemberPreferredTimeOfCallDto> MemberPreferredTimeOfCalls { get; set; } = new();
+        public List<MemberServiceInterruptionDto> MemberServiceInterruptions { get; set; } = new();
+    }
+
+    public sealed class MemberAdditionalDetailDto
+    {
+        [JsonPropertyName("memberadditionaldetailsid")]
+        public int MemberAdditionalDetailsId { get; set; }
+
+        [JsonPropertyName("additionalfieldid")]
+        public int? AdditionalFieldId { get; set; }
+
+        [JsonPropertyName("additionaldetailtext")]
+        public string? AdditionalDetailText { get; set; }
+
+        [JsonPropertyName("activeflag")]
+        public bool? ActiveFlag { get; set; }
+
+        [JsonPropertyName("createdon")]
+        public DateTime? CreatedOn { get; set; }
+
+        [JsonPropertyName("createdby")]
+        public int? CreatedBy { get; set; }
+
+        [JsonPropertyName("updatedon")]
+        public DateTime? UpdatedOn { get; set; }
+
+        [JsonPropertyName("updatedby")]
+        public int? UpdatedBy { get; set; }
+
+        [JsonPropertyName("values")]
+        public List<MemberAdditionalDetailValueDto> Values { get; set; } = new();
+    }
+
+    public sealed class MemberAdditionalDetailValueDto
+    {
+        [JsonPropertyName("memberadditionaldetailvalueid")]
+        public int MemberAdditionalDetailValueId { get; set; }
+
+        [JsonPropertyName("additionalfieldvalueid")]
+        public int? AdditionalFieldValueId { get; set; }
+
+        [JsonPropertyName("additionalfieldvaluetext")]
+        public string? AdditionalFieldValueText { get; set; }
+
+        [JsonPropertyName("activeflag")]
+        public bool? ActiveFlag { get; set; }
+
+        [JsonPropertyName("createdon")]
+        public DateTime? CreatedOn { get; set; }
+
+        [JsonPropertyName("createdby")]
+        public int? CreatedBy { get; set; }
+
+        [JsonPropertyName("updatedon")]
+        public DateTime? UpdatedOn { get; set; }
+
+        [JsonPropertyName("updatedby")]
+        public int? UpdatedBy { get; set; }
+    }
+
+    public sealed class MemberAddressDto
+    {
+        [JsonPropertyName("memberaddressid")] public int MemberAddressId { get; set; }
+        [JsonPropertyName("addresstypeid")] public int? AddressTypeId { get; set; }
+        [JsonPropertyName("addresstype")] public string? AddressType { get; set; }
+        [JsonPropertyName("addressline1")] public string? AddressLine1 { get; set; }
+        [JsonPropertyName("addressline2")] public string? AddressLine2 { get; set; }
+        [JsonPropertyName("addressline3")] public string? AddressLine3 { get; set; }
+        [JsonPropertyName("city")] public string? City { get; set; }
+        [JsonPropertyName("countyid")] public int? CountyId { get; set; }
+        [JsonPropertyName("stateid")] public int? StateId { get; set; }
+        [JsonPropertyName("country")] public string? Country { get; set; }
+        [JsonPropertyName("zipcode")] public string? ZipCode { get; set; }
+        [JsonPropertyName("isprimary")] public bool? IsPrimary { get; set; }
+        [JsonPropertyName("ispreferred")] public bool? IsPreferred { get; set; }
+        [JsonPropertyName("isprivacy")] public bool? IsPrivacy { get; set; }
+        [JsonPropertyName("boroughid")] public int? BoroughId { get; set; }
+        [JsonPropertyName("islandid")] public int? IslandId { get; set; }
+        [JsonPropertyName("regionid")] public int? RegionId { get; set; }
+        [JsonPropertyName("activeflag")] public bool? ActiveFlag { get; set; }
+        [JsonPropertyName("createdon")] public DateTime? CreatedOn { get; set; }
+        [JsonPropertyName("createdby")] public int? CreatedBy { get; set; }
+        [JsonPropertyName("updatedon")] public DateTime? UpdatedOn { get; set; }
+        [JsonPropertyName("updatedby")] public int? UpdatedBy { get; set; }
+    }
+
+    public sealed class MemberEmailDto
+    {
+        [JsonPropertyName("memberemailid")] public int MemberEmailId { get; set; }
+        [JsonPropertyName("emailtypeid")] public int? EmailTypeId { get; set; }
+        [JsonPropertyName("emailtype")] public string? EmailType { get; set; }
+        [JsonPropertyName("emailaddress")] public string? EmailAddress { get; set; }
+        [JsonPropertyName("isprimary")] public bool? IsPrimary { get; set; }
+        [JsonPropertyName("activeflag")] public bool? ActiveFlag { get; set; }
+        [JsonPropertyName("createdon")] public DateTime? CreatedOn { get; set; }
+        [JsonPropertyName("createdby")] public int? CreatedBy { get; set; }
+        [JsonPropertyName("updatedon")] public DateTime? UpdatedOn { get; set; }
+        [JsonPropertyName("updatedby")] public int? UpdatedBy { get; set; }
+    }
+
+    public sealed class MemberPhoneNumberDto
+    {
+        [JsonPropertyName("memberphonenumberid")] public int MemberPhoneNumberId { get; set; }
+        [JsonPropertyName("phonetypeid")] public int? PhoneTypeId { get; set; }
+        [JsonPropertyName("phonetype")] public string? PhoneType { get; set; }
+        [JsonPropertyName("phonenumber")] public string? PhoneNumber { get; set; }
+        [JsonPropertyName("extension")] public string? Extension { get; set; }
+        [JsonPropertyName("isprimary")] public bool? IsPrimary { get; set; }
+        [JsonPropertyName("ispreferred")] public bool? IsPreferred { get; set; }
+        [JsonPropertyName("activeflag")] public bool? ActiveFlag { get; set; }
+        [JsonPropertyName("createdon")] public DateTime? CreatedOn { get; set; }
+        [JsonPropertyName("createdby")] public int? CreatedBy { get; set; }
+        [JsonPropertyName("updatedon")] public DateTime? UpdatedOn { get; set; }
+        [JsonPropertyName("updatedby")] public int? UpdatedBy { get; set; }
+    }
+
+    public sealed class MemberCommunicationImpairmentDto
+    {
+        [JsonPropertyName("membercommunicationimpairmentid")] public int MemberCommunicationImpairmentId { get; set; }
+        [JsonPropertyName("communicationimpairmentid")] public int? CommunicationImpairmentId { get; set; }
+        [JsonPropertyName("activeflag")] public bool? ActiveFlag { get; set; }
+        [JsonPropertyName("createdon")] public DateTime? CreatedOn { get; set; }
+        [JsonPropertyName("createdby")] public int? CreatedBy { get; set; }
+        [JsonPropertyName("updatedon")] public DateTime? UpdatedOn { get; set; }
+        [JsonPropertyName("updatedby")] public int? UpdatedBy { get; set; }
+    }
+
+    public sealed class MemberEvacuationZoneDto
+    {
+        [JsonPropertyName("memberevacuationzoneid")] public int MemberEvacuationZoneId { get; set; }
+        [JsonPropertyName("evacuationzoneid")] public int? EvacuationZoneId { get; set; }
+        [JsonPropertyName("activeflag")] public bool? ActiveFlag { get; set; }
+        [JsonPropertyName("createdon")] public DateTime? CreatedOn { get; set; }
+        [JsonPropertyName("createdby")] public int? CreatedBy { get; set; }
+        [JsonPropertyName("updatedon")] public DateTime? UpdatedOn { get; set; }
+        [JsonPropertyName("updatedby")] public int? UpdatedBy { get; set; }
+    }
+
+    public sealed class MemberIdentifierDto
+    {
+        [JsonPropertyName("memberidentifierid")] public int MemberIdentifierId { get; set; }
+        [JsonPropertyName("identifierid")] public int? IdentifierId { get; set; }
+        [JsonPropertyName("identifiervalue")] public string? IdentifierValue { get; set; }
+        [JsonPropertyName("activeflag")] public bool? ActiveFlag { get; set; }
+        [JsonPropertyName("createdon")] public DateTime? CreatedOn { get; set; }
+        [JsonPropertyName("createdby")] public int? CreatedBy { get; set; }
+        [JsonPropertyName("updatedon")] public DateTime? UpdatedOn { get; set; }
+        [JsonPropertyName("updatedby")] public int? UpdatedBy { get; set; }
+    }
+
+    public sealed class MemberLanguageDto
+    {
+        [JsonPropertyName("memberlanguageid")] public int MemberLanguageId { get; set; }
+        [JsonPropertyName("languageid")] public int? LanguageId { get; set; }
+        [JsonPropertyName("languagetype")] public string? LanguageType { get; set; }
+        [JsonPropertyName("languagetypeid")] public int? LanguageTypeId { get; set; }
+        [JsonPropertyName("isprimary")] public bool? IsPrimary { get; set; }
+        [JsonPropertyName("activeflag")] public bool? ActiveFlag { get; set; }
+        [JsonPropertyName("createdon")] public DateTime? CreatedOn { get; set; }
+        [JsonPropertyName("createdby")] public int? CreatedBy { get; set; }
+        [JsonPropertyName("updatedon")] public DateTime? UpdatedOn { get; set; }
+        [JsonPropertyName("updatedby")] public int? UpdatedBy { get; set; }
+    }
+
+    public sealed class MemberPortalAccessDto
+    {
+        [JsonPropertyName("memberportalaccessid")] public int MemberPortalAccessId { get; set; }
+        [JsonPropertyName("isregistered")] public bool? IsRegistered { get; set; }
+        [JsonPropertyName("issuspended")] public bool? IsSuspended { get; set; }
+        [JsonPropertyName("activeflag")] public bool? ActiveFlag { get; set; }
+        [JsonPropertyName("createdon")] public DateTime? CreatedOn { get; set; }
+        [JsonPropertyName("createdby")] public int? CreatedBy { get; set; }
+        [JsonPropertyName("updatedon")] public DateTime? UpdatedOn { get; set; }
+        [JsonPropertyName("updatedby")] public int? UpdatedBy { get; set; }
+    }
+
+    public sealed class MemberPreferredTimeOfCallDto
+    {
+        [JsonPropertyName("memberpreferredtimeofcallid")] public int MemberPreferredTimeOfCallId { get; set; }
+        [JsonPropertyName("dayid")] public int? DayId { get; set; }
+        [JsonPropertyName("timeid")] public int? TimeId { get; set; }
+        [JsonPropertyName("starttimeid")] public int? StartTimeId { get; set; }
+        [JsonPropertyName("endtimeid")] public int? EndTimeId { get; set; }
+        [JsonPropertyName("activeflag")] public bool? ActiveFlag { get; set; }
+        [JsonPropertyName("createdon")] public DateTime? CreatedOn { get; set; }
+        [JsonPropertyName("createdby")] public int? CreatedBy { get; set; }
+        [JsonPropertyName("updatedon")] public DateTime? UpdatedOn { get; set; }
+        [JsonPropertyName("updatedby")] public int? UpdatedBy { get; set; }
+    }
+
+    public sealed class MemberServiceInterruptionDto
+    {
+        [JsonPropertyName("memberserviceinterruptionid")] public int MemberServiceInterruptionId { get; set; }
+        [JsonPropertyName("serviceinterruptionid")] public int? ServiceInterruptionId { get; set; }
+        [JsonPropertyName("facilityname")] public string? FacilityName { get; set; }
+        [JsonPropertyName("startdate")] public DateTime? StartDate { get; set; }
+        [JsonPropertyName("enddate")] public DateTime? EndDate { get; set; }
+        [JsonPropertyName("activeflag")] public bool? ActiveFlag { get; set; }
+        [JsonPropertyName("createdon")] public DateTime? CreatedOn { get; set; }
+        [JsonPropertyName("createdby")] public int? CreatedBy { get; set; }
+        [JsonPropertyName("updatedon")] public DateTime? UpdatedOn { get; set; }
+        [JsonPropertyName("updatedby")] public int? UpdatedBy { get; set; }
+    }
 
 }
