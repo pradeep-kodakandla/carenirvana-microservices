@@ -214,7 +214,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                       COALESCE(ar.nextreviewdate, a.nextreviewdate) AS ""NextReviewDate"",
 
                       tt.treatmenttext AS ""TreatementType"",
-                      ap.requestprioritytext AS ""RequestPriority"",
+                      COALESCE(NULLIF(ap.requestprioritytext, ''), 'Standard') AS ""RequestPriority"",
                       NULL::text AS ""DataJson"",
                       a.createdon AS ""CreatedOn"",
                       a.createdby AS ""CreatedBy"",
@@ -247,7 +247,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     LEFT JOIN auth_treatment tt
                       ON tt.treatmentid = a.treatementtype::int
 
-                    LEFT JOIN auth_priority ap ON ap.priorityid::text = (a.data::jsonb ->> 'requestSent')
+                    LEFT JOIN auth_priority ap ON ap.priorityid::text = (a.data::jsonb ->> 'requestPriority')
                     LEFT JOIN LATERAL (
                       SELECT MIN(aa.followupdatetime) AS nextreviewdate
                       FROM authactivity aa
