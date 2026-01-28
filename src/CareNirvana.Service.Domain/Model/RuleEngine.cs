@@ -252,4 +252,27 @@ namespace CareNirvana.Service.Domain.Model
         public long? DeletedBy { get; set; }
     }
 
+    public class RulePagedResult<T>
+    {
+        public List<T> Items { get; init; } = new();
+        public long Total { get; init; }
+        public int Page { get; init; }
+        public int PageSize { get; init; }
+    }
+
+    public sealed class RuleExecutionLogListItemDto
+    {
+        public long RuleExecutionLogId { get; init; }
+        public Guid CorrelationId { get; init; }
+        public string TriggerKey { get; init; } = "";
+        public int? ModuleId { get; init; }
+        public string? ModuleName { get; init; }
+        public string Status { get; init; } = "";
+        public string? MatchedRuleName { get; init; }
+        public DateTimeOffset ReceivedOn { get; init; }
+        public int? ResponseTimeMs { get; init; }
+        public string? ErrorMessage { get; init; }
+    }
+
+
 }

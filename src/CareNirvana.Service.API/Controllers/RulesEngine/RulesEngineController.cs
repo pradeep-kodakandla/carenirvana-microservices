@@ -364,5 +364,14 @@ namespace CareNirvana.Service.Api.Controllers
             return row == null ? NotFound() : Ok(row);
         }
 
+
+        [HttpGet("executionlogs")]
+        public async Task<ActionResult<RulePagedResult<RuleExecutionLogListItemDto>>> GetExecutionLogs(
+                [FromQuery] int page = 1, [FromQuery] int pageSize = 10)
+        {
+            var res = await _repo.GetRuleExecutionLogsAsync(page, pageSize);
+            return Ok(res);
+        }
+
     }
 }

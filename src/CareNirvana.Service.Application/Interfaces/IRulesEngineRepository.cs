@@ -66,5 +66,8 @@ namespace CareNirvana.Service.Application.Interfaces
 
         Task<IReadOnlyList<RuleActionDto>> GetRuleActionsAsync(bool? activeOnly = null);
         Task<RuleActionDto?> GetRuleActionAsync(long id);
+
+
+        Task<RulePagedResult<RuleExecutionLogListItemDto>> GetRuleExecutionLogsAsync(int page, int pageSize);
     }
 }

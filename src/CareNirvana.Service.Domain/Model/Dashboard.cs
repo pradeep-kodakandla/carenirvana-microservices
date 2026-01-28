@@ -168,6 +168,8 @@ namespace CareNirvana.Service.Domain.Model
         public DateTimeOffset ReceivedAt { get; set; }
         public int PageCount { get; set; } = 1;
         public long? MemberId { get; set; }
+        public long? MemberDetailsId { get; set; }
+        public string? MemberName { get; set; }
         public string? WorkBasket { get; set; }
         public short Priority { get; set; } = 2;    // 1=High,2=Normal,3=Low
         public string Status { get; set; } = "New";

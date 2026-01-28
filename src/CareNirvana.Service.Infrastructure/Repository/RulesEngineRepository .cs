@@ -1149,6 +1149,51 @@ namespace CareNirvana.Service.Infrastructure.Repository
             return await db.QueryFirstOrDefaultAsync<RuleActionDto>(sql, new { Id = id });
         }
 
+        public async Task<RulePagedResult<RuleExecutionLogListItemDto>> GetRuleExecutionLogsAsync(int page, int pageSize)
+        {
+            page = page <= 0 ? 1 : page;
+            pageSize = pageSize <= 0 ? 10 : pageSize;
+            pageSize = Math.Min(pageSize, 100);
+
+            var offset = (page - 1) * pageSize;
+
+            const string sql = @"
+        select count(*)::bigint
+          from rulesengine.cfgruleexecutionlog;
+
+        select
+          l.ruleexecutionlogid as RuleExecutionLogId,
+          l.correlationid      as CorrelationId,
+          l.triggerkey         as TriggerKey,
+          l.moduleid           as ModuleId,
+          coalesce(m.modulename, '') as ModuleName,
+          l.status             as Status,
+          l.matchedrulename    as MatchedRuleName,
+          l.receivedon         as ReceivedOn,
+          l.responsetime_ms    as ResponseTimeMs,
+          l.errormessage       as ErrorMessage
+        from rulesengine.cfgruleexecutionlog l
+        left join public.cfgmodule m on m.moduleid = l.moduleid
+        order by l.receivedon desc
+        offset @Offset limit @Limit;
+    ";
+
+            using var db = Conn();
+            using var multi = await db.QueryMultipleAsync(sql, new { Offset = offset, Limit = pageSize });
+
+            var total = await multi.ReadSingleAsync<long>();
+            var items = (await multi.ReadAsync<RuleExecutionLogListItemDto>()).AsList();
+
+            return new RulePagedResult<RuleExecutionLogListItemDto>
+            {
+                Items = items,
+                Total = total,
+                Page = page,
+                PageSize = pageSize
+            };
+        }
+
+
 
     }
 }

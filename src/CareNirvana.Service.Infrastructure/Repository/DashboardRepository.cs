@@ -177,7 +177,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                    WHERE ch.createdby = @userId
                   ) AS casecount,
 
-                  (SELECT COUNT(*) FROM public.faxfiles) AS faxcount;
+                  (SELECT COUNT(*) FROM public.faxfiles where deletedby is null) AS faxcount;
                 ";
 
             using var cmd = new NpgsqlCommand(sql, connection);
@@ -1384,7 +1384,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
             cmd.Parameters.AddWithValue("@priority", fax.Priority);
             cmd.Parameters.AddWithValue("@status", fax.Status ?? "New");
             cmd.Parameters.AddWithValue("@processstatus", fax.ProcessStatus ?? "Pending");
-            cmd.Parameters.AddWithValue("@parentfaxid", fax.ParentFaxId);
+            cmd.Parameters.AddWithValue("@parentfaxid", fax.ParentFaxId ?? 0);
 
             // meta jsonb
             if (string.IsNullOrWhiteSpace(fax.MetaJson))
@@ -1467,6 +1467,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                   f.uploadedat,
                   f.pagecount,
                   f.memberid,
+                    LTRIM(RTRIM(CONCAT(md.firstname, ' ', md.lastname))) as membername,
+                md.memberdetailsid,
                   wb.workbasketname as workbasket,
                   f.priority,
                   f.status,
@@ -1482,6 +1484,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                   COUNT(*) OVER() AS total_count
               FROM faxfiles f
 			  LEFT JOIN cfgworkbasket wb on f.workbasket::integer = wb.workbasketid
+                LEFT JOIN memberdetails md on md.memberid = f.memberid
               where f.deletedby is null
               ORDER BY f.receivedat DESC;";
 
@@ -1508,6 +1511,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     UploadedAt = reader.IsDBNull(reader.GetOrdinal("uploadedat")) ? (DateTimeOffset?)null : reader.GetFieldValue<DateTimeOffset>(reader.GetOrdinal("uploadedat")),
                     PageCount = reader.GetInt32(reader.GetOrdinal("pagecount")),
                     MemberId = reader.IsDBNull(reader.GetOrdinal("memberid")) ? (long?)null : reader.GetInt64(reader.GetOrdinal("memberid")),
+                    MemberName = reader.IsDBNull(reader.GetOrdinal("membername")) ? null : reader.GetString(reader.GetOrdinal("membername")),
+                    MemberDetailsId = reader.IsDBNull(reader.GetOrdinal("memberdetailsid")) ? (int?)null : reader.GetInt32(reader.GetOrdinal("memberdetailsid")),
                     WorkBasket = reader.IsDBNull(reader.GetOrdinal("workbasket")) ? null : reader.GetString(reader.GetOrdinal("workbasket")),
                     Priority = reader.IsDBNull(reader.GetOrdinal("priority")) ? (short)2 : reader.GetInt16(reader.GetOrdinal("priority")),
                     Status = reader.IsDBNull(reader.GetOrdinal("status")) ? "New" : reader.GetString(reader.GetOrdinal("status")),
