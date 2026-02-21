@@ -110,5 +110,12 @@ namespace CareNirvana.Service.API.Controllers
             return result == null ? NotFound() : Ok(result);
         }
 
+        [HttpGet("search/authorizations")]
+        public async Task<IActionResult> SearchAuthorizations([FromQuery] string q, [FromQuery] int limit = 25, CancellationToken ct = default)
+        {
+            var result = await _service.SearchAuthorizationsAsync(q, limit, ct);
+            return Ok(result);
+        }
+
     }
 }

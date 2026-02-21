@@ -177,4 +177,26 @@ namespace CareNirvana.Service.Domain.Model
         public DateTime? updatedOn { get; set; }
         public string? updatedBy { get; set; }
     }
+
+    public class AuthorizationSearchResult
+    {
+        public string? authnumber { get; set; }
+        public string? authtype { get; set; }
+        public string? enrollmenthierarchy { get; set; }
+        public string? overallstatus { get; set; }
+
+        public string? icdcode { get; set; }
+        public string? icddescription { get; set; }
+
+        public string? servicecode { get; set; }
+        public string? servicedescription { get; set; }
+        public string? reviewtype { get; set; }
+
+        public DateTime? fromdate { get; set; }
+        public DateTime? todate { get; set; }
+
+        public string? decisionstatus { get; set; }
+        public string? denialtype { get; set; }
+        public string? denialreason { get; set; }
+    }
 }

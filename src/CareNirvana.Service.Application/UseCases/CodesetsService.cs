@@ -78,6 +78,11 @@ namespace CareNirvana.Service.Application.UseCases
             return _repository.GetClaimByIdAsync(memberClaimHeaderId, ct);
         }
 
+        public Task<IReadOnlyList<AuthorizationSearchResult>> SearchAuthorizationsAsync(string q, int limit = 25, CancellationToken ct = default)
+        {
+            return _repository.SearchAuthorizationsAsync(q, limit, ct);
+        }
+
     }
 
 }

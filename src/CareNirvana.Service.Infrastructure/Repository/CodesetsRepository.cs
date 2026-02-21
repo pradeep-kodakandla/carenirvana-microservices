@@ -1038,6 +1038,93 @@ namespace CareNirvana.Service.Infrastructure.Repository
             };
         }
 
+        public async Task<IReadOnlyList<AuthorizationSearchResult>> SearchAuthorizationsAsync(
+            string q,
+            int limit = 25,
+            CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 2)
+                return Array.Empty<AuthorizationSearchResult>();
+
+            q = q.Trim();
+
+            await using var conn = GetConnection();
+            await conn.OpenAsync(ct);
+
+            const string sql = @"
+                SELECT DISTINCT ON (a.authnumber)
+                    a.authnumber::text                                     AS authnumber,
+                    at.authtemplatename                                    AS authtype,
+                    COALESCE(a.data->>'authClassId', a.authtypeid::text)    AS enrollmenthierarchy,
+                    a.authstatus::text                                     AS overallstatus,
+
+                    a.data #>> '{icd1_icdCode,code}'                        AS icdcode,
+                    COALESCE(a.data->>'icd1_icdDescription',
+                             a.data #>> '{icd1_icdCode,codeDesc}')          AS icddescription,
+
+                    dd.elem #>> '{data,serviceCode}'                        AS servicecode,
+                    COALESCE(dd.elem #>> '{data,serviceDescription}',
+                             dd.elem #>> '{data,procedureDescription}')     AS servicedescription,
+                    dd.elem #>> '{data,reviewTypeLabel}'                    AS reviewtype,
+
+                    NULLIF(dd.elem #>> '{data,fromDate}', '')::timestamp    AS fromdate,
+                    NULLIF(dd.elem #>> '{data,toDate}', '')::timestamp      AS todate,
+
+                    dd.elem #>> '{data,decisionStatusLabel}'                AS decisionstatus,
+                    dd.elem #>> '{data,newSelect_copy_bszkkn8o1Label}'       AS denialtype,
+                    dd.elem #>> '{data,newSelect_copy_3uon6b5w0Label}'       AS denialreason
+
+                FROM authdetail a
+                JOIN cfgauthtemplate at ON at.authtemplateid = a.authtypeid
+                LEFT JOIN LATERAL jsonb_array_elements(a.data->'decisionDetails') AS dd(elem) ON TRUE
+                WHERE
+                      a.authnumber::text ILIKE @starts
+                   OR at.authtemplatename ILIKE @contains
+                ORDER BY
+                    a.authnumber,
+                    -- prefer updatedDateTime when present; it may be ISO with Z
+                    NULLIF(dd.elem #>> '{data,updatedDateTime}', '')::timestamptz DESC NULLS LAST,
+                    NULLIF(dd.elem #>> '{data,createdDateTime}', '')::timestamp DESC NULLS LAST,
+                    (dd.elem #>> '{data,procedureNo}')::int DESC NULLS LAST
+                LIMIT @limit;
+            ";
+
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("starts", $"{q}%");
+            cmd.Parameters.AddWithValue("contains", $"%{q}%");
+            cmd.Parameters.AddWithValue("limit", limit);
+
+            var results = new List<AuthorizationSearchResult>(limit);
+
+            await using var reader = await cmd.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                results.Add(new AuthorizationSearchResult
+                {
+                    authnumber = reader["authnumber"]?.ToString(),
+                    authtype = reader["authtype"]?.ToString(),
+                    enrollmenthierarchy = reader["enrollmenthierarchy"]?.ToString(),
+                    overallstatus = reader["overallstatus"]?.ToString(),
+
+                    icdcode = reader["icdcode"]?.ToString(),
+                    icddescription = reader["icddescription"]?.ToString(),
+
+                    servicecode = reader["servicecode"]?.ToString(),
+                    servicedescription = reader["servicedescription"]?.ToString(),
+                    reviewtype = reader["reviewtype"]?.ToString(),
+
+                    fromdate = reader["fromdate"] == DBNull.Value ? null : (DateTime?)reader["fromdate"],
+                    todate = reader["todate"] == DBNull.Value ? null : (DateTime?)reader["todate"],
+
+                    decisionstatus = reader["decisionstatus"]?.ToString(),
+                    denialtype = reader["denialtype"]?.ToString(),
+                    denialreason = reader["denialreason"]?.ToString(),
+                });
+            }
+
+            return results;
+        }
+
 
     }
 }
