@@ -1414,7 +1414,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 UPDATE faxfiles
                 SET
                     filename      = @filename,
-                    memberid      = @memberid,
+                    meta          = @meta,
                     workbasket    = @workbasket,
                     priority      = @priority,
                     status        = @status,
@@ -1438,6 +1438,11 @@ namespace CareNirvana.Service.Infrastructure.Repository
             cmd.Parameters.AddWithValue("@updatedby", (object?)fax.UpdatedBy ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@deletedon", fax.DeletedOn ?? DateTime.UtcNow);
             cmd.Parameters.AddWithValue("@deletedby", (object?)fax.DeletedBy ?? DBNull.Value);
+            if (string.IsNullOrWhiteSpace(fax.MetaJson))
+                cmd.Parameters.AddWithValue("@meta", NpgsqlDbType.Jsonb, DBNull.Value);
+            else
+                cmd.Parameters.AddWithValue("@meta", NpgsqlDbType.Jsonb, fax.MetaJson);
+
 
             return await cmd.ExecuteNonQueryAsync();
         }
