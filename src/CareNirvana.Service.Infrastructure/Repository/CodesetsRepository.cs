@@ -2,6 +2,7 @@
 using CareNirvana.Service.Domain.Model;
 using Microsoft.Extensions.Configuration;
 using Npgsql;
+using System.Text.Json;
 
 
 namespace CareNirvana.Service.Infrastructure.Repository
@@ -1125,6 +1126,201 @@ namespace CareNirvana.Service.Infrastructure.Repository
             return results;
         }
 
+        public async Task<string?> GetClaimJsonAsync(string claimNumber, CancellationToken ct = default)
+        {
+            const string sql = @"
+                            SELECT
+                                jsonb_build_object(
+                                'header', to_jsonb(h),
+                                'lines',  COALESCE(lines.lines, '[]'::jsonb),
+                                'diagnoses', COALESCE(dxs.diagnoses, '[]'::jsonb),
+                                'documents', COALESCE(docs.documents, '[]'::jsonb),
+                                'payments', COALESCE(pays.payments, '[]'::jsonb)
+                                )::text AS claim_json
+                            FROM memberclaimheader h
+                            LEFT JOIN LATERAL (
+                                SELECT jsonb_agg(
+                                        jsonb_build_object(
+                                            'line', to_jsonb(l),
+                                            'pharmacy', COALESCE(ph.pharmacy, '[]'::jsonb),
+                                            'toothDetails', COALESCE(td.tooth_details, '[]'::jsonb)
+                                        )
+                                        ORDER BY l.claimline
+                                        ) AS lines
+                                FROM memberclaimline l
+                                LEFT JOIN LATERAL (
+                                SELECT jsonb_agg(to_jsonb(phl) ORDER BY phl.memberclaimlinepharmacyid) AS pharmacy
+                                FROM memberclaimlinepharmacy phl
+                                WHERE phl.memberclaimlineid = l.memberclaimlineid
+                                ) AS ph ON TRUE
+                                LEFT JOIN LATERAL (
+                                SELECT jsonb_agg(to_jsonb(td1) ORDER BY td1.memberclaimlinetoothdetailid) AS tooth_details
+                                FROM memberclaimlinetoothdetail td1
+                                WHERE td1.memberclaimlineid = l.memberclaimlineid
+                                ) AS td ON TRUE
+                                WHERE l.memberclaimheaderid = h.memberclaimheaderid
+                            ) AS lines ON TRUE
+                            LEFT JOIN LATERAL (
+                                SELECT jsonb_agg(to_jsonb(d) ORDER BY d.diagnosissequence) AS diagnoses
+                                FROM memberclaimdiagnosis d
+                                WHERE d.memberclaimheaderid = h.memberclaimheaderid
+                            ) AS dxs ON TRUE
+                            LEFT JOIN LATERAL (
+                                SELECT jsonb_agg(to_jsonb(doc) ORDER BY doc.memberclaimdocumentid) AS documents
+                                FROM memberclaimdocument doc
+                                WHERE doc.memberclaimheaderid = h.memberclaimheaderid
+                            ) AS docs ON TRUE
+                            LEFT JOIN LATERAL (
+                                SELECT jsonb_agg(to_jsonb(p) ORDER BY p.paymentdate, p.memberclaimpaymentid) AS payments
+                                FROM memberclaimpayment p
+                                WHERE p.memberclaimheaderid = h.memberclaimheaderid
+                            ) AS pays ON TRUE
+                            WHERE h.claimnumber = @claimnumber
+                            LIMIT 1;";
 
+            await using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync(ct);
+
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@claimnumber", claimNumber);
+
+            var result = await cmd.ExecuteScalarAsync(ct);
+            return result == null || result is DBNull ? null : (string)result;
+        }
+
+        public async Task<string?> GetProviderProfileJsonAsync(string providerId, CancellationToken ct = default)
+        {
+            const string sql = @"
+                    SELECT
+                      jsonb_build_object(
+                        'provider',            to_jsonb(p),
+                        'addresses',           COALESCE(addr.addresses, '[]'::jsonb),
+                        'telecom',             COALESCE(tel.telecom, '[]'::jsonb),
+                        'identifiers',         COALESCE(ident.identifiers, '[]'::jsonb),
+                        'licenses',            COALESCE(lic.licenses, '[]'::jsonb),
+                        'education',           COALESCE(edu.education, '[]'::jsonb),
+                        'boardCertifications', COALESCE(bc.board_certs, '[]'::jsonb),
+                        'accreditations',      COALESCE(acc.accreditations, '[]'::jsonb),
+                        'attestations',        COALESCE(att.attestations, '[]'::jsonb),
+                        'characteristics',     COALESCE(charc.characteristics, '[]'::jsonb),
+                        'liabilityInsurance',  COALESCE(liab.liability, '[]'::jsonb),
+                        'networks',            COALESCE(net.networks, '[]'::jsonb),
+                        'roles',               COALESCE(role.roles, '[]'::jsonb),
+                        'availability',        COALESCE(avail.availability, '[]'::jsonb),
+                        'disciplinaryActions', COALESCE(disc.disciplinary_actions, '[]'::jsonb),
+                        'languages',           COALESCE(lang.languages, '[]'::jsonb)
+                      )::text AS provider_json
+                    FROM provider p
+                    LEFT JOIN LATERAL (
+                      SELECT jsonb_agg(to_jsonb(a) ORDER BY a.isprimary DESC, a.provideraddressid) AS addresses
+                      FROM provideraddress a
+                      WHERE a.providerid = p.providerid
+                    ) AS addr ON TRUE
+                    LEFT JOIN LATERAL (
+                      SELECT jsonb_agg(to_jsonb(t) ORDER BY t.isprimary DESC, t.providertelecomid) AS telecom
+                      FROM providertelecom t
+                      WHERE t.providerid = p.providerid
+                    ) AS tel ON TRUE
+                    LEFT JOIN LATERAL (
+                      SELECT jsonb_agg(to_jsonb(i) ORDER BY i.provideridentifierid) AS identifiers
+                      FROM provideridentifier i
+                      WHERE i.providerid = p.providerid
+                    ) AS ident ON TRUE
+                    LEFT JOIN LATERAL (
+                      SELECT jsonb_agg(to_jsonb(l) ORDER BY l.providerlicenseid) AS licenses
+                      FROM providerlicense l
+                      WHERE l.providerid = p.providerid
+                    ) AS lic ON TRUE
+                    LEFT JOIN LATERAL (
+                      SELECT jsonb_agg(to_jsonb(e) ORDER BY e.providereducationid) AS education
+                      FROM providereducation e
+                      WHERE e.providerid = p.providerid
+                    ) AS edu ON TRUE
+                    LEFT JOIN LATERAL (
+                      SELECT jsonb_agg(to_jsonb(b) ORDER BY b.providerboardcertificationid) AS board_certs
+                      FROM providerboardcertification b
+                      WHERE b.providerid = p.providerid
+                    ) AS bc ON TRUE
+                    LEFT JOIN LATERAL (
+                      SELECT jsonb_agg(to_jsonb(a) ORDER BY a.provideraccreditationid) AS accreditations
+                      FROM provideraccreditation a
+                      WHERE a.providerid = p.providerid
+                    ) AS acc ON TRUE
+                    LEFT JOIN LATERAL (
+                      SELECT jsonb_agg(to_jsonb(a) ORDER BY a.providerattestationid) AS attestations
+                      FROM providerattestation a
+                      WHERE a.providerid = p.providerid
+                    ) AS att ON TRUE
+                    LEFT JOIN LATERAL (
+                      SELECT jsonb_agg(to_jsonb(c) ORDER BY c.providercharacteristicid) AS characteristics
+                      FROM providercharacteristic c
+                      WHERE c.providerid = p.providerid
+                    ) AS charc ON TRUE
+                    LEFT JOIN LATERAL (
+                      SELECT jsonb_agg(to_jsonb(li) ORDER BY li.providerliabilityinsuranceid) AS liability
+                      FROM providerliabilityinsurance li
+                      WHERE li.providerid = p.providerid
+                    ) AS liab ON TRUE
+                    LEFT JOIN LATERAL (
+                      SELECT jsonb_agg(to_jsonb(n) ORDER BY n.providernetworkid) AS networks
+                      FROM providernetwork n
+                      WHERE n.providerid = p.providerid
+                    ) AS net ON TRUE
+                    LEFT JOIN LATERAL (
+                      SELECT jsonb_agg(to_jsonb(r) ORDER BY r.providerroleid) AS roles
+                      FROM providerrole r
+                      WHERE r.practitionerproviderid = p.providerid
+                         OR r.organizationproviderid = p.providerid
+                    ) AS role ON TRUE
+                    LEFT JOIN LATERAL (
+                      SELECT jsonb_agg(to_jsonb(a) ORDER BY a.provideravailabilityid) AS availability
+                      FROM provideravailability a
+                      WHERE a.providerroleid IN (
+                        SELECT r.providerroleid
+                        FROM providerrole r
+                        WHERE r.practitionerproviderid = p.providerid
+                           OR r.organizationproviderid = p.providerid
+                      )
+                    ) AS avail ON TRUE
+                    LEFT JOIN LATERAL (
+                      SELECT jsonb_agg(to_jsonb(d) ORDER BY d.providerdisciplinaryactionid) AS disciplinary_actions
+                      FROM providerdisciplinaryaction d
+                      WHERE d.providerid = p.providerid
+                    ) AS disc ON TRUE
+                    LEFT JOIN LATERAL (
+                      SELECT jsonb_agg(to_jsonb(l) ORDER BY l.providerlanguageid) AS languages
+                      FROM providerlanguage l
+                      WHERE l.providerid = p.providerid
+                    ) AS lang ON TRUE
+                    WHERE p.npi = @providerid
+                    LIMIT 1;";
+
+            await using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync(ct);
+
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@providerid", providerId);
+
+            var result = await cmd.ExecuteScalarAsync(ct);
+            return result == null || result is DBNull ? null : (string)result;
+        }
+
+        public async Task<string?> GetAuthDetailsJsonAsync(string authNumber, CancellationToken ct = default)
+        {
+            const string sql = @"
+                SELECT a.data::text
+                FROM authdetail a
+                WHERE a.authnumber = @authnumber
+                LIMIT 1;";
+
+            await using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync(ct);
+
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@authnumber", authNumber);
+
+            var result = await cmd.ExecuteScalarAsync(ct);
+            return result == null || result is DBNull ? null : (string)result;
+        }
     }
 }

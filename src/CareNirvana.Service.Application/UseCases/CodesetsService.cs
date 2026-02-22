@@ -83,6 +83,19 @@ namespace CareNirvana.Service.Application.UseCases
             return _repository.SearchAuthorizationsAsync(q, limit, ct);
         }
 
+        public Task<string?> GetClaimJsonAsync(string claimNumber, CancellationToken ct = default)
+        {
+            return _repository.GetClaimJsonAsync(claimNumber, ct);
+        }
+        public Task<string?> GetProviderProfileJsonAsync(string providerId, CancellationToken ct = default)
+        {
+            return _repository.GetProviderProfileJsonAsync(providerId, ct);
+        }
+        public Task<string?> GetAuthDetailsJsonAsync(string authNumber, CancellationToken ct = default)
+        {
+            return _repository.GetAuthDetailsJsonAsync(authNumber, ct);
+
+        }
     }
 
 }
