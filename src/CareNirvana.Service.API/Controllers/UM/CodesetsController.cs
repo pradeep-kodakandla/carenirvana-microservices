@@ -117,5 +117,27 @@ namespace CareNirvana.Service.API.Controllers
             return Ok(result);
         }
 
+        [HttpGet("claimjson/{claimNumber}")]
+        public async Task<IActionResult> GetClaimJson(string claimNumber, CancellationToken ct = default)
+        {
+            var result = await _service.GetClaimJsonAsync(claimNumber, ct);
+            return result == null ? NotFound() : Ok(result);
+        }
+
+        [HttpGet("providerprofilejson/{providerId}")]
+        public async Task<IActionResult> GetProviderProfileJson(string providerId, CancellationToken ct = default)
+        {
+            var result = await _service.GetProviderProfileJsonAsync(providerId, ct);
+            return result == null ? NotFound() : Ok(result);
+        }
+
+        [HttpGet("authdetailsjson/{authNumber}")]
+        public async Task<IActionResult> GetAuthDetailsJson(string authNumber, CancellationToken ct = default)
+        {
+            var result = await _service.GetAuthDetailsJsonAsync(authNumber, ct);
+            return result == null ? NotFound() : Ok(result);
+        }
+
+
     }
 }
