@@ -1411,38 +1411,38 @@ namespace CareNirvana.Service.Infrastructure.Repository
             await conn.OpenAsync();
 
             const string sql = @"
-                UPDATE faxfiles
-                SET
-                    filename      = @filename,
-                    meta          = @meta,
-                    workbasket    = @workbasket,
-                    priority      = @priority,
-                    status        = @status,
-                    processstatus = @processstatus,
-                    updatedon     = @updatedon,
-                    updatedby     = @updatedby,
-                    deletedon     = @deletedon,
-                    deletedby     = @deletedby
-                WHERE faxid = @faxid;";
+UPDATE faxfiles
+SET
+    filename      = @filename,
+    meta          = COALESCE(@meta, meta),
+    workbasket    = @workbasket,
+    priority      = @priority,
+    status        = @status,
+    processstatus = @processstatus,
+    updatedon     = @updatedon,
+    updatedby     = @updatedby,
+    deletedon     = COALESCE(@deletedon, deletedon),
+    deletedby     = COALESCE(@deletedby, deletedby)
+WHERE faxid = @faxid;";
 
             using var cmd = new NpgsqlCommand(sql, conn);
 
             cmd.Parameters.AddWithValue("@faxid", fax.FaxId);
-            cmd.Parameters.AddWithValue("@filename", fax.FileName ?? (object)DBNull.Value);
-            cmd.Parameters.AddWithValue("@memberid", (object?)fax.MemberId ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@filename", (object?)fax.FileName ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@workbasket", (object?)fax.WorkBasket ?? DBNull.Value);
             cmd.Parameters.AddWithValue("@priority", fax.Priority);
-            cmd.Parameters.AddWithValue("@status", fax.Status ?? "New");
-            cmd.Parameters.AddWithValue("@processstatus", fax.ProcessStatus ?? "Pending");
+            cmd.Parameters.AddWithValue("@status", (object?)fax.Status ?? "New");
+            cmd.Parameters.AddWithValue("@processstatus", (object?)fax.ProcessStatus ?? "Pending");
             cmd.Parameters.AddWithValue("@updatedon", fax.UpdatedOn ?? DateTime.UtcNow);
             cmd.Parameters.AddWithValue("@updatedby", (object?)fax.UpdatedBy ?? DBNull.Value);
-            cmd.Parameters.AddWithValue("@deletedon", fax.DeletedOn ?? DateTime.UtcNow);
-            cmd.Parameters.AddWithValue("@deletedby", (object?)fax.DeletedBy ?? DBNull.Value);
-            if (string.IsNullOrWhiteSpace(fax.MetaJson))
-                cmd.Parameters.AddWithValue("@meta", NpgsqlDbType.Jsonb, DBNull.Value);
-            else
-                cmd.Parameters.AddWithValue("@meta", NpgsqlDbType.Jsonb, fax.MetaJson);
 
+            // Do not update deleted fields unless sent
+            cmd.Parameters.AddWithValue("@deletedon", (object?)fax.DeletedOn ?? DBNull.Value);
+            cmd.Parameters.AddWithValue("@deletedby", (object?)fax.DeletedBy ?? DBNull.Value);
+
+            // Do not update meta unless sent
+            var metaParam = cmd.Parameters.Add("@meta", NpgsqlDbType.Jsonb);
+            metaParam.Value = string.IsNullOrWhiteSpace(fax.MetaJson) ? DBNull.Value : fax.MetaJson;
 
             return await cmd.ExecuteNonQueryAsync();
         }
