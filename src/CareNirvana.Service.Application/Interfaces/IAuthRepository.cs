@@ -20,6 +20,7 @@ namespace CareNirvana.Service.Application.Interfaces
         Task<bool> SoftDeleteDecisionSectionItemAsync(long authDetailId, string sectionName, Guid itemId, int userId, CancellationToken ct = default);
 
         Task AcceptRejectAuthWorkgroupAsync( long authWorkgroupId, string actionType, string? comment, int userId, int completedStatusId   );
+        Task<string> GetFaxSummaryAsync(string paData, string value);
     }
 
     public interface IAuthNotesRepository

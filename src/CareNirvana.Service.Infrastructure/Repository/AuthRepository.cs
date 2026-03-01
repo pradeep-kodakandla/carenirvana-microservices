@@ -5,6 +5,8 @@ using Microsoft.Extensions.Configuration;
 using Npgsql;
 using System.Data;
 using System.Text.Json;
+using System.Net.Http.Headers;
+using System.Text;
 
 namespace CareNirvana.Service.Infrastructure.Repository
 {
@@ -947,6 +949,272 @@ namespace CareNirvana.Service.Infrastructure.Repository
             return (singleId.HasValue && singleId.Value > 0)
                 ? new[] { singleId.Value }
                 : Array.Empty<int>();
+        }
+
+
+        public async Task<string> GetAuthSummaryAsync(string authNumber)
+        {
+            const string sql = @"
+        SELECT a.data::text AS DataJson
+        FROM public.authdetail a
+        WHERE a.authnumber = @authNumber
+          AND a.deletedon IS NULL
+        ORDER BY a.createdon DESC
+        LIMIT 1;";
+
+            // 1) Get auth JSON from PostgreSQL
+            string? dataJson = null;
+            await using (var conn = new NpgsqlConnection(_connStr))
+            {
+                await conn.OpenAsync();
+                await using var cmd = new NpgsqlCommand(sql, conn);
+                cmd.Parameters.AddWithValue("@authNumber", authNumber);
+                var result = await cmd.ExecuteScalarAsync();
+                dataJson = result?.ToString();
+            }
+
+            if (string.IsNullOrWhiteSpace(dataJson))
+                return $"No authorization data found for auth number '{authNumber}'.";
+
+            // 2) Read API key from environment
+            var apiKey = "";
+            if (string.IsNullOrWhiteSpace(apiKey))
+                throw new InvalidOperationException("ANTHROPIC_API_KEY is not configured.");
+
+            // 3) Build prompt with the actual auth JSON
+            //var prompt = $"""
+            //        Summarize the following authorization in a concise clinical review format.
+            //        Include:
+            //        - authorization overview
+            //        - diagnosis codes
+            //        - requested service/procedure
+            //        - requested / approved / denied units
+            //        - decision status
+            //        - service dates
+            //        - provider completeness
+            //        - important notes
+            //        If a field is missing, say it is missing.
+            //        Keep it factual and concise.
+            //        Authorization JSON:
+            //        {dataJson}
+            //        """;
+            var prompt = $"""
+                    You are a clinical utilization review analyst. Analyze the following authorization JSON 
+                    and produce a summary in flowing paragraph format (no bullet points, no tables, no markdown headers).
+
+                    Write exactly these paragraphs in this order:
+
+                    **Authorization Overview:** A brief paragraph covering the auth status, type, treatment type, 
+                    place of service, request date, priority, and how the request was received.
+
+                    **Diagnosis & Procedure Summary:** A paragraph listing the diagnosis codes with descriptions 
+                    and all requested procedures with CPT/HCPCS codes and descriptions.
+
+                    **Decision Summary:** A paragraph stating each procedure's requested, approved, and denied units, 
+                    the decision status, decision reason, and decision dates.
+
+                    **Service Dates & Providers:** A paragraph covering the service date ranges for each procedure 
+                    and all provider details (name, role, NPI, location). If any provider fields are missing, 
+                    state which ones.
+
+                    **Clinical Criteria Match:** Evaluate whether the diagnosis codes clinically support the 
+                    requested procedures. Flag any diagnosis-procedure mismatch, age-appropriateness concerns, 
+                    or medical necessity gaps. State whether the clinical criteria appear to be met, partially met, 
+                    or not met, and explain why.
+
+                    **Missing Documentation:** Identify all fields that are null, empty, or absent in the JSON. 
+                    Specifically check for: episode, claim type, LOS, discharge date, authorization notes, 
+                    notification date, member notification status, provider NPI, provider signatures, 
+                    clinical rationale, and supporting documentation references. List everything that is missing 
+                    in a single sentence.
+
+                    **AI Recommendation:** Based on the overall analysis — clinical alignment, completeness of data, 
+                    decision history, and provider information — provide a recommendation. State whether this 
+                    authorization appears appropriate for approval, requires additional documentation, 
+                    should be pended for clinical review, or has indicators suggesting denial. 
+                    Provide a brief rationale for your recommendation.
+
+                    Rules:
+                    - Write in plain English paragraphs only. No markdown, no bullet points, no tables, no headers.
+                    - Label each paragraph by starting with the paragraph name in bold (e.g., "Authorization Overview:").
+                    - If a field is missing or null, say so explicitly.
+                    - Be factual and concise. Do not fabricate data.
+                    - Keep the entire summary under 500 words.
+
+                    Authorization JSON:
+                    {dataJson}
+                    """;
+
+            var requestBody = new
+            {
+                model = "claude-sonnet-4-20250514",
+                max_tokens = 1024,
+                messages = new[]
+                {
+            new { role = "user", content = prompt }
+        }
+            };
+
+            // 4) Call Anthropic Claude API
+            using var httpClient = new HttpClient();
+            httpClient.DefaultRequestHeaders.Add("x-api-key", apiKey);
+            httpClient.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
+
+            using var response = await httpClient.PostAsync(
+                "https://api.anthropic.com/v1/messages",
+                new StringContent(
+                    JsonSerializer.Serialize(requestBody),
+                    Encoding.UTF8,
+                    "application/json")
+            );
+
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+                throw new Exception($"Claude API error ({(int)response.StatusCode}): {responseContent}");
+
+            // 5) Parse summary text from Claude's response
+            using var doc = JsonDocument.Parse(responseContent);
+
+            if (doc.RootElement.TryGetProperty("content", out var contentElement) &&
+                contentElement.ValueKind == JsonValueKind.Array)
+            {
+                var sb = new StringBuilder();
+                foreach (var block in contentElement.EnumerateArray())
+                {
+                    if (block.TryGetProperty("type", out var typeEl) &&
+                        typeEl.GetString() == "text" &&
+                        block.TryGetProperty("text", out var textEl))
+                    {
+                        sb.AppendLine(textEl.GetString());
+                    }
+                }
+
+                var summary = sb.ToString().Trim();
+                if (!string.IsNullOrWhiteSpace(summary))
+                    return summary;
+            }
+
+            // fallback: return raw API response if format changes
+            return responseContent;
+        }
+
+        public async Task<string> GetFaxSummaryAsync(string paData, string value)
+        {
+            if (string.IsNullOrWhiteSpace(paData))
+                return "No PA data provided for fax summary.";
+
+            // 1) Read API key from environment
+            var apiKey = value;
+
+            if (string.IsNullOrWhiteSpace(apiKey))
+                throw new InvalidOperationException("ANTHROPIC_API_KEY is not configured.");
+
+            // 2) Build prompt with the PA data
+            var prompt = $"""
+            You are a clinical utilization review analyst. Analyze the following Prior Authorization (PA) 
+            fax data and produce a summary in flowing paragraph format (no bullet points, no tables, no markdown headers).
+
+            Write exactly these paragraphs in this order:
+
+            **Member & Authorization Overview:** A brief paragraph covering the member name, date of birth, 
+            CMDP ID, authorization type (initial, renewal, etc.), service date range, and any plan or 
+            program identifiers present.
+
+            **Diagnosis & Procedure Summary:** A paragraph listing all diagnosis codes with descriptions 
+            and all requested services/procedures with CPT/HCPCS codes, descriptions, and charges.
+
+            **Provider Information:** A paragraph covering the referring physician (name, NPI, address), 
+            servicing provider (name, NPI, address), and facility details. If any provider fields such as 
+            NPI, address, AHCCCS registration, or facility name are missing, state which ones explicitly.
+
+            **Supporting Documentation Review:** A paragraph evaluating what supporting documentation is 
+            referenced or attached (e.g., clinical notes, evaluation reports, lab results, imaging). 
+            Flag if documentation is referenced but not actually attached, or if no documentation is 
+            provided at all.
+
+            **Clinical Criteria Match:** Evaluate whether the diagnosis codes clinically support the 
+            requested procedures. Flag any diagnosis-procedure mismatch, age-appropriateness concerns 
+            (using the member's DOB to calculate age), or medical necessity gaps. State whether the 
+            clinical criteria appear to be met, partially met, or not met, and explain why.
+
+            **Missing Information:** Identify all fields that are missing, empty, marked as "Not provided," 
+            or absent from the fax data. Specifically check for: member ID, authorization type, 
+            service dates, diagnosis codes, procedure codes, charges, referring physician NPI, 
+            servicing provider NPI, AHCCCS registration for both providers, facility name and address, 
+            supporting clinical documentation, and any required signatures. List everything that is 
+            missing in a single sentence.
+
+            **AI Recommendation:** Based on the overall analysis — clinical alignment, completeness of data, 
+            provider information, and supporting documentation — provide a recommendation. State whether 
+            this fax-based PA request appears appropriate for approval, requires additional documentation, 
+            should be pended for clinical review, or has indicators suggesting denial. 
+            Provide a brief rationale for your recommendation.
+
+            Rules:
+            - Write in plain English paragraphs only. No markdown, no bullet points, no tables, no headers.
+            - Label each paragraph by starting with the paragraph name in bold (e.g., "Member & Authorization Overview:").
+            - If a field is missing or marked as "Not provided", say so explicitly.
+            - Use the member's DOB to calculate age and factor it into clinical appropriateness.
+            - Be factual and concise. Do not fabricate data.
+            - Keep the entire summary under 500 words.
+
+            PA Fax Data:
+            {paData}
+            """;
+
+            var requestBody = new
+            {
+                model = "claude-sonnet-4-20250514",
+                max_tokens = 1024,
+                messages = new[]
+                {
+            new { role = "user", content = prompt }
+        }
+            };
+
+            // 3) Call Anthropic Claude API
+            using var httpClient = new HttpClient();
+            httpClient.DefaultRequestHeaders.Add("x-api-key", apiKey);
+            httpClient.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
+
+            using var response = await httpClient.PostAsync(
+                "https://api.anthropic.com/v1/messages",
+                new StringContent(
+                    JsonSerializer.Serialize(requestBody),
+                    Encoding.UTF8,
+                    "application/json")
+            );
+
+            var responseContent = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+                throw new Exception($"Claude API error ({(int)response.StatusCode}): {responseContent}");
+
+            // 4) Parse summary text from Claude's response
+            using var doc = JsonDocument.Parse(responseContent);
+
+            if (doc.RootElement.TryGetProperty("content", out var contentElement) &&
+                contentElement.ValueKind == JsonValueKind.Array)
+            {
+                var sb = new StringBuilder();
+                foreach (var block in contentElement.EnumerateArray())
+                {
+                    if (block.TryGetProperty("type", out var typeEl) &&
+                        typeEl.GetString() == "text" &&
+                        block.TryGetProperty("text", out var textEl))
+                    {
+                        sb.AppendLine(textEl.GetString());
+                    }
+                }
+
+                var summary = sb.ToString().Trim();
+                if (!string.IsNullOrWhiteSpace(summary))
+                    return summary;
+            }
+
+            // fallback: return raw API response if format changes
+            return responseContent;
         }
 
     }

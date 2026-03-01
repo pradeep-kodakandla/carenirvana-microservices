@@ -299,5 +299,22 @@ namespace CareNirvana.Service.Api.Controllers
             }
         }
 
+        public class FaxSummaryRequest
+        {
+            public string PaData { get; set; }
+            public string Value { get; set; }
+        }
+
+        [HttpPost("faxsummary")]
+        public async Task<ActionResult<string>> GetFaxSummary([FromBody] FaxSummaryRequest request)
+        {
+            if (request == null) return BadRequest("Request body is required.");
+            if (string.IsNullOrWhiteSpace(request.PaData)) return BadRequest("paData is required.");
+            if (string.IsNullOrWhiteSpace(request.Value)) return BadRequest("value is required.");
+
+            var summary = await _authRepo.GetFaxSummaryAsync(request.PaData, request.Value);
+            return Ok(summary);
+        }
+
     }
 }
