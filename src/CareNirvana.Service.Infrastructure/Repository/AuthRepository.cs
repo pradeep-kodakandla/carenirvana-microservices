@@ -13,10 +13,12 @@ namespace CareNirvana.Service.Infrastructure.Repository
     public class AuthRepository : IAuthRepository
     {
         private readonly string _connStr;
+        private readonly string _aiAPI;
 
         public AuthRepository(IConfiguration configuration)
         {
             _connStr = configuration.GetConnectionString("DefaultConnection");
+            _aiAPI = configuration["AiSettings:AIApiKey"];
         }
 
         private NpgsqlConnection CreateConn() => new NpgsqlConnection(_connStr);
@@ -977,7 +979,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 return $"No authorization data found for auth number '{authNumber}'.";
 
             // 2) Read API key from environment
-            var apiKey = "";
+            var apiKey = _aiAPI;
             if (string.IsNullOrWhiteSpace(apiKey))
                 throw new InvalidOperationException("ANTHROPIC_API_KEY is not configured.");
 
@@ -1105,63 +1107,28 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 return "No PA data provided for fax summary.";
 
             // 1) Read API key from environment
-            var apiKey = value;
+            var apiKey = _aiAPI;
 
             if (string.IsNullOrWhiteSpace(apiKey))
                 throw new InvalidOperationException("ANTHROPIC_API_KEY is not configured.");
 
             // 2) Build prompt with the PA data
             var prompt = $"""
-            You are a clinical utilization review analyst. Analyze the following Prior Authorization (PA) 
-            fax data and produce a summary in flowing paragraph format (no bullet points, no tables, no markdown headers).
-
-            Write exactly these paragraphs in this order:
-
-            **Member & Authorization Overview:** A brief paragraph covering the member name, date of birth, 
-            CMDP ID, authorization type (initial, renewal, etc.), service date range, and any plan or 
-            program identifiers present.
-
-            **Diagnosis & Procedure Summary:** A paragraph listing all diagnosis codes with descriptions 
-            and all requested services/procedures with CPT/HCPCS codes, descriptions, and charges.
-
-            **Provider Information:** A paragraph covering the referring physician (name, NPI, address), 
-            servicing provider (name, NPI, address), and facility details. If any provider fields such as 
-            NPI, address, AHCCCS registration, or facility name are missing, state which ones explicitly.
-
-            **Supporting Documentation Review:** A paragraph evaluating what supporting documentation is 
-            referenced or attached (e.g., clinical notes, evaluation reports, lab results, imaging). 
-            Flag if documentation is referenced but not actually attached, or if no documentation is 
-            provided at all.
-
-            **Clinical Criteria Match:** Evaluate whether the diagnosis codes clinically support the 
-            requested procedures. Flag any diagnosis-procedure mismatch, age-appropriateness concerns 
-            (using the member's DOB to calculate age), or medical necessity gaps. State whether the 
-            clinical criteria appear to be met, partially met, or not met, and explain why.
-
-            **Missing Information:** Identify all fields that are missing, empty, marked as "Not provided," 
-            or absent from the fax data. Specifically check for: member ID, authorization type, 
-            service dates, diagnosis codes, procedure codes, charges, referring physician NPI, 
-            servicing provider NPI, AHCCCS registration for both providers, facility name and address, 
-            supporting clinical documentation, and any required signatures. List everything that is 
-            missing in a single sentence.
-
-            **AI Recommendation:** Based on the overall analysis — clinical alignment, completeness of data, 
-            provider information, and supporting documentation — provide a recommendation. State whether 
-            this fax-based PA request appears appropriate for approval, requires additional documentation, 
-            should be pended for clinical review, or has indicators suggesting denial. 
-            Provide a brief rationale for your recommendation.
-
-            Rules:
-            - Write in plain English paragraphs only. No markdown, no bullet points, no tables, no headers.
-            - Label each paragraph by starting with the paragraph name in bold (e.g., "Member & Authorization Overview:").
-            - If a field is missing or marked as "Not provided", say so explicitly.
-            - Use the member's DOB to calculate age and factor it into clinical appropriateness.
-            - Be factual and concise. Do not fabricate data.
-            - Keep the entire summary under 500 words.
-
-            PA Fax Data:
-            {paData}
-            """;
+                You are a clinical utilization review analyst. Generate a concise clinical summary paragraph 
+                for the following Prior Authorization (PA) fax data.
+                Rules:
+                - Output a single short paragraph (5-8 sentences max).
+                - Include: member name, DOB, ID, diagnosis (with codes), requested service (with CPT/HCPCS codes), 
+                  referring and servicing providers, and service date range.
+                - Flag any clinical mismatches between diagnosis and requested service.
+                - Flag any missing or incomplete data fields (e.g., NPI, address, supporting documentation).
+                - Use the member's DOB to calculate age and note any age-appropriateness concerns.
+                - Do NOT make coverage recommendations or clinical decisions.
+                - Use professional, neutral clinical language.
+                - This summary is for reviewer support only, not a coverage determination.
+                PA Fax Data:
+                {paData}
+                """;
 
             var requestBody = new
             {
