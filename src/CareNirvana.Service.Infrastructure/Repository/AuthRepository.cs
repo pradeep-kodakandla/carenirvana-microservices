@@ -1101,66 +1101,102 @@ namespace CareNirvana.Service.Infrastructure.Repository
             return responseContent;
         }
 
-        public async Task<string> GetFaxSummaryAsync(string paData, string value)
+        public async Task<string> AIGetFaxSummaryAsync(string paData, string value)
         {
             if (string.IsNullOrWhiteSpace(paData))
                 return "No PA data provided for fax summary.";
 
-            // 1) Read API key from environment
             var apiKey = _aiAPI;
-
             if (string.IsNullOrWhiteSpace(apiKey))
                 throw new InvalidOperationException("ANTHROPIC_API_KEY is not configured.");
 
-            // 2) Build prompt with the PA data
+            // ── Compact prompt to minimize input tokens ──
             var prompt = $"""
-                You are a clinical utilization review analyst. Generate a concise clinical summary paragraph 
-                for the following Prior Authorization (PA) fax data.
-                Rules:
-                - Output a single short paragraph (5-8 sentences max).
-                - Include: member name, DOB, ID, diagnosis (with codes), requested service (with CPT/HCPCS codes), 
-                  referring and servicing providers, and service date range.
-                - Flag any clinical mismatches between diagnosis and requested service.
-                - Flag any missing or incomplete data fields (e.g., NPI, address, supporting documentation).
-                - Use the member's DOB to calculate age and note any age-appropriateness concerns.
-                - Do NOT make coverage recommendations or clinical decisions.
-                - Use professional, neutral clinical language.
-                - This summary is for reviewer support only, not a coverage determination.
-                PA Fax Data:
+                You are a clinical utilization review analyst.
+                Use web search to verify each HCPCS and ICD-10 code against CMS/official coding sites before responding.
+                Return EXACTLY two sections from this PA data:
+                SECTION 1 — "PA Clinical Summary — Reviewer Support Only"
+                Single paragraph (5-8 sentences): member name, DOB, age, ID, auth type, HCPCS code with verified CMS description, service dates, ICD-10 with verified description, referring physician/NPI, servicing provider (flag missing NPI).
+                SECTION 2 — "Critical Flags Identified"
+                Flag only:
+                1. Clinical Mismatch: What HCPCS is used for vs what diagnosis represents. State if relationship exists. If not, note likely coding error.
+                2. Age-Appropriateness: Calculate age from DOB vs service dates. Flag if service is atypical for age.
+                Rules: No other sections. No coverage decisions. Neutral clinical language. End with disclaimer this is for reviewer support only.
+                PA Data:
                 {paData}
                 """;
+
+            var messages = new[]
+            {
+        new { role = "user", content = prompt }
+    };
 
             var requestBody = new
             {
                 model = "claude-sonnet-4-20250514",
-                max_tokens = 1024,
-                messages = new[]
+                max_tokens = 2048,
+                tools = new object[]
                 {
-            new { role = "user", content = prompt }
-        }
+            new
+            {
+                type = "web_search_20250305",
+                name = "web_search"
+            }
+                },
+                messages
             };
 
-            // 3) Call Anthropic Claude API
+            var jsonPayload = JsonSerializer.Serialize(requestBody);
+
+            // ── Retry logic with exponential backoff for rate limits ──
             using var httpClient = new HttpClient();
             httpClient.DefaultRequestHeaders.Add("x-api-key", apiKey);
             httpClient.DefaultRequestHeaders.Add("anthropic-version", "2023-06-01");
 
-            using var response = await httpClient.PostAsync(
-                "https://api.anthropic.com/v1/messages",
-                new StringContent(
-                    JsonSerializer.Serialize(requestBody),
-                    Encoding.UTF8,
-                    "application/json")
-            );
+            int maxRetries = 3;
+            int delaySeconds = 30; // start with 30s since limit is per-minute
 
-            var responseContent = await response.Content.ReadAsStringAsync();
+            HttpResponseMessage response = null;
+            string responseContent = null;
+
+            for (int attempt = 0; attempt <= maxRetries; attempt++)
+            {
+                response = await httpClient.PostAsync(
+                    "https://api.anthropic.com/v1/messages",
+                    new StringContent(jsonPayload, Encoding.UTF8, "application/json")
+                );
+
+                responseContent = await response.Content.ReadAsStringAsync();
+
+                if (response.IsSuccessStatusCode)
+                    break;
+
+                // If rate limited (429), wait and retry
+                if ((int)response.StatusCode == 429 && attempt < maxRetries)
+                {
+                    // Check for Retry-After header from API
+                    if (response.Headers.TryGetValues("retry-after", out var retryValues) &&
+                        int.TryParse(retryValues.FirstOrDefault(), out int retryAfter))
+                    {
+                        await Task.Delay(retryAfter * 1000);
+                    }
+                    else
+                    {
+                        await Task.Delay(delaySeconds * 1000);
+                        delaySeconds *= 2; // exponential backoff: 30s, 60s, 120s
+                    }
+                    continue;
+                }
+
+                // Non-retryable error
+                throw new Exception($"Claude API error ({(int)response.StatusCode}): {responseContent}");
+            }
 
             if (!response.IsSuccessStatusCode)
-                throw new Exception($"Claude API error ({(int)response.StatusCode}): {responseContent}");
+                throw new Exception($"Claude API error after {maxRetries} retries ({(int)response.StatusCode}): {responseContent}");
 
-            // 4) Parse summary text from Claude's response
+            // ── Parse text blocks from response ──
             using var doc = JsonDocument.Parse(responseContent);
-
             if (doc.RootElement.TryGetProperty("content", out var contentElement) &&
                 contentElement.ValueKind == JsonValueKind.Array)
             {
@@ -1180,7 +1216,6 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     return summary;
             }
 
-            // fallback: return raw API response if format changes
             return responseContent;
         }
 

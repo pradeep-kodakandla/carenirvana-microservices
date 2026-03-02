@@ -312,7 +312,7 @@ namespace CareNirvana.Service.Api.Controllers
             if (string.IsNullOrWhiteSpace(request.PaData)) return BadRequest("paData is required.");
             if (string.IsNullOrWhiteSpace(request.Value)) return BadRequest("value is required.");
 
-            var summary = await _authRepo.GetFaxSummaryAsync(request.PaData, request.Value);
+            var summary = await _authRepo.AIGetFaxSummaryAsync(request.PaData, request.Value);
             return Ok(summary);
         }
 
