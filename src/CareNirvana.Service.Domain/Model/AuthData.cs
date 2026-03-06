@@ -35,6 +35,11 @@ namespace CareNirvana.Service.Domain.Model
 
         public long? AuthWorkgroupId { get; set; } // optional if you want to show/action later
 
+        public int TotalDecisions { get; set; }
+        public string? DecisionStatusesJson { get; set; }
+        public string? OverallDecisionStatus { get; set; }
+        public string? OverallDecisionStatusCode { get; set; }
+
 
     }
 

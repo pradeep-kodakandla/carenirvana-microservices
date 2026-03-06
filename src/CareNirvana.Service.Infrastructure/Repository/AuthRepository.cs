@@ -178,114 +178,196 @@ namespace CareNirvana.Service.Infrastructure.Repository
         {
             const string sql = @"
                 WITH admin AS (
-                      SELECT jsoncontent::jsonb AS j
-                      FROM cfgadmindata
-                      WHERE module = 'UM'
-                      ORDER BY COALESCE(updatedon, createdon) DESC NULLS LAST
-                      LIMIT 1
-                    ),
-                    auth_status AS (
-                      SELECT
+                    SELECT jsoncontent::jsonb AS j
+                    FROM cfgadmindata
+                    WHERE module = 'UM'
+                    ORDER BY COALESCE(updatedon, createdon) DESC NULLS LAST
+                    LIMIT 1
+                ),
+                auth_status AS (
+                    SELECT
                         (s->>'id')::int AS authstatusid,
                         s->>'authStatus' AS authstatustext,
                         COALESCE((s->>'activeFlag')::boolean, false) AS activeflag
-                      FROM admin
-                      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(admin.j->'authstatus', '[]'::jsonb)) s
-                    ),
-                    auth_treatment AS (
-                      SELECT
+                    FROM admin
+                    CROSS JOIN LATERAL jsonb_array_elements(COALESCE(admin.j->'authstatus', '[]'::jsonb)) s
+                ),
+                auth_treatment AS (
+                    SELECT
                         (s->>'id')::int AS treatmentid,
                         s->>'treatmentType' AS treatmenttext
-                      FROM admin
-                      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(admin.j->'treatmenttype', '[]'::jsonb)) s
-                    ),
-                    auth_priority AS (
-                      SELECT
+                    FROM admin
+                    CROSS JOIN LATERAL jsonb_array_elements(COALESCE(admin.j->'treatmenttype', '[]'::jsonb)) s
+                ),
+                auth_priority AS (
+                    SELECT
                         (s->>'id')::int AS priorityid,
                         s->>'requestPriority' AS requestprioritytext
-                      FROM admin
-                      CROSS JOIN LATERAL jsonb_array_elements(COALESCE(admin.j->'requestpriority', '[]'::jsonb)) s
-                    )
+                    FROM admin
+                    CROSS JOIN LATERAL jsonb_array_elements(COALESCE(admin.j->'requestpriority', '[]'::jsonb)) s
+                ),
+                decision_status_master AS (
                     SELECT
-                      a.authdetailid AS ""AuthDetailId"",
-                      a.authnumber AS ""AuthNumber"",
-                      a.authtypeid AS ""AuthTypeId"",
-                      tmpl.authtemplatename AS ""AuthTemplateName"",
-                      a.memberdetailsid AS ""MemberDetailsId"",
+                        (s->>'id')::int AS decisionstatusid,
+                        COALESCE(
+                            s->>'decisionStatus',
+                            s->>'status',
+                            s->>'name',
+                            s->>'label',
+                            s->>'text'
+                        ) AS decisionstatustext,
+                        COALESCE((s->>'activeFlag')::boolean, true) AS activeflag
+                    FROM admin
+                    CROSS JOIN LATERAL jsonb_array_elements(COALESCE(admin.j->'decisionstatus', '[]'::jsonb)) s
+                ),
+                decision_status_code_master AS (
+                    SELECT
+                        (s->>'id')::int AS decisionstatuscodeid,
+                        COALESCE(
+                            s->>'decisionStatusCode',
+                            s->>'statusCode',
+                            s->>'name',
+                            s->>'label',
+                            s->>'text'
+                        ) AS decisionstatuscodetext,
+                        COALESCE((s->>'activeFlag')::boolean, true) AS activeflag
+                    FROM admin
+                    CROSS JOIN LATERAL jsonb_array_elements(COALESCE(admin.j->'decisionstatuscode', '[]'::jsonb)) s
+                )
+                SELECT
+                    a.authdetailid AS ""AuthDetailId"",
+                    a.authnumber AS ""AuthNumber"",
+                    a.authtypeid AS ""AuthTypeId"",
+                    tmpl.authtemplatename AS ""AuthTemplateName"",
+                    a.memberdetailsid AS ""MemberDetailsId"",
 
-                      COALESCE(a.authduedate, a.createdon + interval '10 days') AS ""AuthDueDate"",
+                    COALESCE(a.authduedate, a.createdon + interval '10 days') AS ""AuthDueDate"",
+                    COALESCE(ar.nextreviewdate, a.nextreviewdate) AS ""NextReviewDate"",
 
-                      COALESCE(ar.nextreviewdate, a.nextreviewdate) AS ""NextReviewDate"",
-
-                      tt.treatmenttext AS ""TreatementType"",
-                      COALESCE(NULLIF(ap.requestprioritytext, ''), 'Standard') AS ""RequestPriority"",
-                      NULL::text AS ""DataJson"",
-                      a.createdon AS ""CreatedOn"",
-                      a.createdby AS ""CreatedBy"",
-                      a.updatedon AS ""UpdatedOn"",
-                      a.updatedby AS ""UpdatedBy"",
-                      a.deletedon AS ""DeletedOn"",
-                      a.deletedby AS ""DeletedBy"",
-                      a.authclassid AS ""AuthClassId"",
-                      a.authassignedto AS ""AuthAssignedTo"",
-                      a.authstatus AS ""AuthStatus"",
-                      st.authstatustext AS ""AuthStatusText"",
-                      su.username AS ""CreatedByUserName"",
-                      md.memberid AS ""MemberId"",
-                      (COALESCE(md.firstname,'') ||
+                    tt.treatmenttext AS ""TreatementType"",
+                    COALESCE(NULLIF(ap.requestprioritytext, ''), 'Standard') AS ""RequestPriority"",
+                    NULL::text AS ""DataJson"",
+                    a.createdon AS ""CreatedOn"",
+                    a.createdby AS ""CreatedBy"",
+                    a.updatedon AS ""UpdatedOn"",
+                    a.updatedby AS ""UpdatedBy"",
+                    a.deletedon AS ""DeletedOn"",
+                    a.deletedby AS ""DeletedBy"",
+                    a.authclassid AS ""AuthClassId"",
+                    a.authassignedto AS ""AuthAssignedTo"",
+                    a.authstatus AS ""AuthStatus"",
+                    st.authstatustext AS ""AuthStatusText"",
+                    su.username AS ""CreatedByUserName"",
+                    md.memberid AS ""MemberId"",
+                    (COALESCE(md.firstname,'') ||
                         CASE
-                          WHEN md.lastname IS NULL OR md.lastname = '' THEN ''
-                          ELSE ' ' || md.lastname
+                            WHEN md.lastname IS NULL OR md.lastname = '' THEN ''
+                            ELSE ' ' || md.lastname
                         END
-                      ) AS ""MemberName"",
-                      COALESCE(wg.is_assigned, false) AS ""IsWorkgroupAssigned"",
-                      (COALESCE(wg.is_assigned, false) = true AND COALESCE(wg.any_accept, false) = false) AS ""IsWorkgroupPending""
+                    ) AS ""MemberName"",
+                    COALESCE(wg.is_assigned, false) AS ""IsWorkgroupAssigned"",
+                    (COALESCE(wg.is_assigned, false) = true AND COALESCE(wg.any_accept, false) = false) AS ""IsWorkgroupPending"",
 
-                    FROM authdetail a
-                    LEFT JOIN cfgauthtemplate tmpl ON tmpl.authtemplateid = a.authtypeid
-                    LEFT JOIN securityuser su ON su.userid = a.createdby
-                    LEFT JOIN memberdetails md ON md.memberdetailsid = a.memberdetailsid
-                    LEFT JOIN auth_status st
-                      ON st.authstatusid = a.authstatus
-                     AND st.activeflag = true
-                    LEFT JOIN auth_treatment tt
-                      ON tt.treatmentid = a.treatementtype::int
+                    COALESCE(dec.total_decisions, 0) AS ""TotalDecisions"",
+                    COALESCE(dec.decision_statuses_json, '[]'::jsonb)::text AS ""DecisionStatusesJson"",
+                    dec.overall_decision_status AS ""OverallDecisionStatus"",
+                    dec.overall_decision_status_code AS ""OverallDecisionStatusCode""
 
-                    LEFT JOIN auth_priority ap ON ap.priorityid::text = (a.data::jsonb ->> 'requestPriority')
-                    LEFT JOIN LATERAL (
-                      SELECT MIN(aa.followupdatetime) AS nextreviewdate
-                      FROM authactivity aa
-                      WHERE aa.authdetailid = a.authdetailid
-                        AND aa.referto IS NOT NULL
-                        AND aa.followupdatetime IS NOT NULL
-                    ) ar ON true
+                FROM authdetail a
+                LEFT JOIN cfgauthtemplate tmpl ON tmpl.authtemplateid = a.authtypeid
+                LEFT JOIN securityuser su ON su.userid = a.createdby
+                LEFT JOIN memberdetails md ON md.memberdetailsid = a.memberdetailsid
 
-                    LEFT JOIN LATERAL (
-                      SELECT
+                LEFT JOIN auth_status st
+                    ON st.authstatusid = a.authstatus
+                   AND st.activeflag = true
+
+                LEFT JOIN auth_treatment tt
+                    ON tt.treatmentid = a.treatementtype::int
+
+                LEFT JOIN auth_priority ap
+                    ON ap.priorityid::text = (a.data::jsonb ->> 'requestPriority')
+
+                LEFT JOIN LATERAL (
+                    SELECT MIN(aa.followupdatetime) AS nextreviewdate
+                    FROM authactivity aa
+                    WHERE aa.authdetailid = a.authdetailid
+                      AND aa.referto IS NOT NULL
+                      AND aa.followupdatetime IS NOT NULL
+                ) ar ON true
+
+                LEFT JOIN LATERAL (
+                    SELECT
                         (COUNT(*) > 0) AS is_assigned,
                         array_remove(array_agg(awg.workgroupworkbasketid ORDER BY awg.createdon DESC), NULL) AS wgwb_ids,
                         bool_or(
-                          EXISTS (
-                            SELECT 1
-                            FROM authworkgroupaction awa
-                            WHERE awa.authworkgroupid = awg.authworkgroupid
-                              AND awa.activeflag = true
-                              AND upper(awa.actiontype) = 'ACCEPT'
-                          )
+                            EXISTS (
+                                SELECT 1
+                                FROM authworkgroupaction awa
+                                WHERE awa.authworkgroupid = awg.authworkgroupid
+                                  AND awa.activeflag = true
+                                  AND upper(awa.actiontype) = 'ACCEPT'
+                            )
                         ) AS any_accept
-                      FROM authworkgroup awg
-                      WHERE awg.authdetailid = a.authdetailid
-                        AND awg.requesttype = 'AUTH'
-                        AND awg.activeflag = true
-                    ) wg ON true
+                    FROM authworkgroup awg
+                    WHERE awg.authdetailid = a.authdetailid
+                      AND awg.requesttype = 'AUTH'
+                      AND awg.activeflag = true
+                ) wg ON true
 
-                where a.memberdetailsid = @memberDetailsId
-                  and (@includeDeleted = true or a.deletedon is null)
-                order by a.createdon desc;";
+                LEFT JOIN LATERAL (
+                    SELECT
+                        COUNT(*) FILTER (
+                            WHERE COALESCE(dd.item->>'deletedOn', '') = ''
+                        ) AS total_decisions,
 
+                        jsonb_agg(
+                            jsonb_build_object(
+                                'itemId', dd.item->>'itemId',
+                                'procedureNo', dd.item->'data'->>'procedureNo',
+                                'serviceCode', COALESCE(dd.item->'data'->>'serviceCode', dd.item->'data'->'procedureCode'->>'code'),
+                                'procedureDescription', COALESCE(dd.item->'data'->>'procedureDescription', dd.item->'data'->>'serviceDescription'),
+                                'decisionStatusId', dd.item->'data'->>'decisionStatus',
+                                'decisionStatus', dsm.decisionstatustext,
+                                'decisionStatusCodeId', dd.item->'data'->>'decisionStatusCode',
+                                'decisionStatusCode', dscm.decisionstatuscodetext,
+                                'decisionDateTime', dd.item->'data'->>'decisionDateTime',
+                                'decisionRequestDatetime', dd.item->'data'->>'decisionRequestDatetime',
+                                'approved', dd.item->'data'->>'approved',
+                                'denied', dd.item->'data'->>'denied',
+                                'requested', dd.item->'data'->>'requested'
+                            )
+                            ORDER BY COALESCE(dd.item->>'updatedOn', dd.item->>'createdOn')
+                        ) FILTER (
+                            WHERE COALESCE(dd.item->>'deletedOn', '') = ''
+                        ) AS decision_statuses_json,
 
+                        CASE
+                            WHEN COUNT(*) FILTER (WHERE COALESCE(dd.item->>'deletedOn', '') = '') = 0 THEN NULL
+                            WHEN COUNT(DISTINCT COALESCE(dd.item->'data'->>'decisionStatus', '')) FILTER (WHERE COALESCE(dd.item->>'deletedOn', '') = '') = 1
+                                THEN MIN(dsm.decisionstatustext) FILTER (WHERE COALESCE(dd.item->>'deletedOn', '') = '')
+                            ELSE 'Partial'
+                        END AS overall_decision_status,
 
+                        CASE
+                            WHEN COUNT(*) FILTER (WHERE COALESCE(dd.item->>'deletedOn', '') = '') = 0 THEN NULL
+                            WHEN COUNT(DISTINCT COALESCE(dd.item->'data'->>'decisionStatusCode', '')) FILTER (WHERE COALESCE(dd.item->>'deletedOn', '') = '') = 1
+                                THEN MIN(dscm.decisionstatuscodetext) FILTER (WHERE COALESCE(dd.item->>'deletedOn', '') = '')
+                            ELSE 'Partial'
+                        END AS overall_decision_status_code
 
+                    FROM jsonb_array_elements(COALESCE(a.data::jsonb->'decisionDetails', '[]'::jsonb)) AS dd(item)
+                    LEFT JOIN decision_status_master dsm
+                        ON dsm.decisionstatusid::text = dd.item->'data'->>'decisionStatus'
+                       AND dsm.activeflag = true
+                    LEFT JOIN decision_status_code_master dscm
+                        ON dscm.decisionstatuscodeid::text = dd.item->'data'->>'decisionStatusCode'
+                       AND dscm.activeflag = true
+                ) dec ON true
+
+                WHERE a.memberdetailsid = @memberDetailsId
+                  AND (@includeDeleted = true OR a.deletedon IS NULL)
+                ORDER BY a.createdon DESC;";
 
             await using var conn = CreateConn();
             var rows = await conn.QueryAsync<AuthDetailRow>(sql, new { memberDetailsId, includeDeleted });
