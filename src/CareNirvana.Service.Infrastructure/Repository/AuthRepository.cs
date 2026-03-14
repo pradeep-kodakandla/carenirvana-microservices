@@ -1301,5 +1301,92 @@ namespace CareNirvana.Service.Infrastructure.Repository
             return responseContent;
         }
 
+
+        public async Task<DuplicateCheckResult> CheckDuplicateAuthAsync(DuplicateCheckRequest req)
+        {
+            // ── 1. Sanitize dynamic JSONB keys (allow only [a-zA-Z0-9_] to prevent injection) ──
+            static bool IsValidJsonbKey(string key) =>
+                !string.IsNullOrWhiteSpace(key) && System.Text.RegularExpressions.Regex.IsMatch(key, @"^[a-zA-Z0-9_]+$");
+
+            var parameters = new DynamicParameters();
+            parameters.Add("memberDetailsId", req.MemberDetailsId);
+
+            // ── 2. Base query ─────────────────────────────────────────────
+            var sb = new StringBuilder();
+            sb.AppendLine(@"
+                SELECT a.authdetailid AS AuthDetailId,
+                       a.authnumber   AS AuthNumber
+                FROM   authdetail a
+                WHERE  a.memberdetailsid = @memberDetailsId
+                  AND  a.deletedon IS NULL");
+
+            // Exclude self (when editing an existing auth)
+            if (req.CurrentAuthDetailId.HasValue && req.CurrentAuthDetailId.Value > 0)
+            {
+                sb.AppendLine("  AND a.authdetailid <> @currentAuthDetailId");
+                parameters.Add("currentAuthDetailId", req.CurrentAuthDetailId.Value);
+            }
+
+            // Exclude specified auth statuses
+            if (req.ExcludeStatuses?.Count > 0)
+            {
+                sb.AppendLine("  AND (a.authstatus IS NULL OR a.authstatus <> ALL(@excludeStatuses))");
+                parameters.Add("excludeStatuses", req.ExcludeStatuses.ToArray());
+            }
+
+            // ── 3. Dynamic exact-match conditions on JSONB fields ─────────
+            //   Values may be stored as plain strings ("A9600") OR as objects
+            //   ({"id":689,"code":"A9600",...}) depending on whether a lookup
+            //   was used.  We check both representations with OR.
+            int idx = 0;
+            foreach (var kvp in req.MatchFields ?? new Dictionary<string, string>())
+            {
+                if (!IsValidJsonbKey(kvp.Key)) continue;
+                if (string.IsNullOrEmpty(kvp.Value)) continue;
+
+                var paramName = $"mf{idx}";
+                sb.AppendLine($"  AND (a.data->>'{kvp.Key}' = @{paramName} OR a.data->'{kvp.Key}'->>'code' = @{paramName})");
+                parameters.Add(paramName, kvp.Value);
+                idx++;
+            }
+
+            // ── 4. Date-range overlap check ───────────────────────────────
+            // Overlap formula:  existing.begin <= new.end + N days
+            //               AND existing.end   >= new.begin - N days
+            if (req.DateRange != null
+                && IsValidJsonbKey(req.DateRange.BeginDateKey)
+                && IsValidJsonbKey(req.DateRange.EndDateKey)
+                && !string.IsNullOrEmpty(req.DateRange.BeginDateValue)
+                && !string.IsNullOrEmpty(req.DateRange.EndDateValue))
+            {
+                var overlapDays = Math.Max(req.DateOverlapDays, 0);
+                parameters.Add("newBegin", DateTime.Parse(req.DateRange.BeginDateValue).ToUniversalTime());
+                parameters.Add("newEnd", DateTime.Parse(req.DateRange.EndDateValue).ToUniversalTime());
+                parameters.Add("overlapDays", overlapDays);
+
+                var bk = req.DateRange.BeginDateKey;
+                var ek = req.DateRange.EndDateKey;
+
+                sb.AppendLine($@"
+                  AND a.data->>'{bk}' IS NOT NULL
+                  AND a.data->>'{ek}' IS NOT NULL
+                  AND (a.data->>'{bk}')::timestamp <= @newEnd   + (@overlapDays || ' days')::interval
+                  AND (a.data->>'{ek}')::timestamp >= @newBegin - (@overlapDays || ' days')::interval");
+            }
+
+            sb.AppendLine("  ORDER BY a.createdon DESC");
+            sb.AppendLine("  LIMIT 10;"); // cap results to avoid runaway queries
+
+            // ── 5. Execute ────────────────────────────────────────────────
+            await using var conn = CreateConn();
+            var rows = (await conn.QueryAsync<DuplicateAuthInfo>(sb.ToString(), parameters)).AsList();
+
+            return new DuplicateCheckResult
+            {
+                HasDuplicates = rows.Count > 0,
+                Duplicates = rows
+            };
+        }
+
     }
 }

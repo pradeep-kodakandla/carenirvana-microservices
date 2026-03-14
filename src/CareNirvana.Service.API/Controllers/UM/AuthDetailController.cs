@@ -316,5 +316,18 @@ namespace CareNirvana.Service.Api.Controllers
             return Ok(summary);
         }
 
+        [HttpPost("duplicate-check")]
+        public async Task<IActionResult> CheckDuplicate([FromBody] DuplicateCheckRequest req)
+        {
+            if (req == null || req.MemberDetailsId <= 0)
+                return BadRequest("MemberDetailsId is required.");
+
+            if ((req.MatchFields == null || req.MatchFields.Count == 0) && req.DateRange == null)
+                return BadRequest("At least one match field or date range is required.");
+
+            var result = await _authRepo.CheckDuplicateAuthAsync(req);
+            return Ok(result);
+        }
+
     }
 }

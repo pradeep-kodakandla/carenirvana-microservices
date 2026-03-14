@@ -39,8 +39,6 @@ namespace CareNirvana.Service.Domain.Model
         public string? DecisionStatusesJson { get; set; }
         public string? OverallDecisionStatus { get; set; }
         public string? OverallDecisionStatusCode { get; set; }
-
-
     }
 
     public class CreateAuthRequest
@@ -258,5 +256,69 @@ namespace CareNirvana.Service.Domain.Model
         public int? GroupStatusId { get; set; }           // optional (you can set on insert)
     }
 
+    public class DuplicateCheckRequest
+    {
+        /// <summary>Member whose auths to search.</summary>
+        public int MemberDetailsId { get; set; }
+
+        /// <summary>Exclude the current auth (when editing). Null for new auths.</summary>
+        public long? CurrentAuthDetailId { get; set; }
+
+        /// <summary>
+        /// Exact-match fields: JSONB key → value.
+        /// Example: { "treatmentType": "1", "procedure1_procedureCode": "A9604" }
+        /// </summary>
+        public Dictionary<string, string> MatchFields { get; set; } = new();
+
+        /// <summary>
+        /// Auth statuses (integer IDs) to exclude from duplicate search.
+        /// Typically Cancelled (3) and Withdrawn (6).
+        /// </summary>
+        public List<int> ExcludeStatuses { get; set; } = new();
+
+        /// <summary>
+        /// Optional date-range overlap check.
+        /// When provided, matches auths whose date range overlaps with the given range.
+        /// </summary>
+        public DateRangeCheck? DateRange { get; set; }
+
+        /// <summary>
+        /// Number of days of gap still considered overlapping (0 = strict overlap).
+        /// </summary>
+        public int DateOverlapDays { get; set; } = 0;
+    }
+
+    /// <summary>
+    /// Identifies two JSONB date keys that form a range, plus the current auth's values.
+    /// </summary>
+    public class DateRangeCheck
+    {
+        /// <summary>JSONB key for the begin/from date (e.g. "procedure1_fromDate" or "beginDate").</summary>
+        public string BeginDateKey { get; set; } = "";
+
+        /// <summary>Current auth's begin date value (ISO string).</summary>
+        public string? BeginDateValue { get; set; }
+
+        /// <summary>JSONB key for the end/to date (e.g. "procedure1_toDate" or "endDate").</summary>
+        public string EndDateKey { get; set; } = "";
+
+        /// <summary>Current auth's end date value (ISO string).</summary>
+        public string? EndDateValue { get; set; }
+    }
+
+    /// <summary>
+    /// Result returned by the duplicate check API.
+    /// </summary>
+    public class DuplicateCheckResult
+    {
+        public bool HasDuplicates { get; set; }
+        public List<DuplicateAuthInfo> Duplicates { get; set; } = new();
+    }
+
+    public class DuplicateAuthInfo
+    {
+        public long AuthDetailId { get; set; }
+        public string AuthNumber { get; set; } = "";
+    }
 
 }

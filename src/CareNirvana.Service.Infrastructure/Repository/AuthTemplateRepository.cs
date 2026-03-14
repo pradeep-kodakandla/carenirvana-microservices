@@ -252,8 +252,6 @@ namespace CareNirvana.Service.Infrastructure.Repository
           and cv.moduleid = 2
         limit 1;";
 
-            Console.WriteLine($"[GetByTemplateIdAsync] templateId = {templateId}");
-            Console.WriteLine($"[GetByTemplateIdAsync] conn = {_connectionString}");
 
             await using var conn = new NpgsqlConnection(_connectionString);
             await conn.OpenAsync();
@@ -265,7 +263,6 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
             await using var reader = await cmd.ExecuteReaderAsync();
 
-            Console.WriteLine($"[GetByTemplateIdAsync] HasRows = {reader.HasRows}");
 
             if (!await reader.ReadAsync())
             {
@@ -284,7 +281,6 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 UpdatedBy = reader.IsDBNull(6) ? null : reader.GetInt32(6)
             };
 
-            Console.WriteLine($"[GetByTemplateIdAsync] Found: Id={result.Id}, TemplateId={result.TemplateId}");
             return result;
         }
 

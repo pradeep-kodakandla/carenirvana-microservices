@@ -21,6 +21,8 @@ namespace CareNirvana.Service.Application.Interfaces
 
         Task AcceptRejectAuthWorkgroupAsync( long authWorkgroupId, string actionType, string? comment, int userId, int completedStatusId   );
         Task<string> AIGetFaxSummaryAsync(string paData, string value);
+
+        Task<DuplicateCheckResult> CheckDuplicateAuthAsync(DuplicateCheckRequest req);
     }
 
     public interface IAuthNotesRepository
