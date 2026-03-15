@@ -257,7 +257,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     a.authassignedto AS ""AuthAssignedTo"",
                     a.authstatus AS ""AuthStatus"",
                     st.authstatustext AS ""AuthStatusText"",
-                    su.username AS ""CreatedByUserName"",
+                    LTRIM(RTRIM(CONCAT(sd.firstname, ' ', sd.lastname, ' - ', cr.name))) AS ""CreatedByUserName"",
                     md.memberid AS ""MemberId"",
                     (COALESCE(md.firstname,'') ||
                         CASE
@@ -276,6 +276,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 FROM authdetail a
                 LEFT JOIN cfgauthtemplate tmpl ON tmpl.authtemplateid = a.authtypeid
                 LEFT JOIN securityuser su ON su.userid = a.createdby
+                JOIN securityuserdetail sd ON sd.userdetailid = su.userdetailid
+                JOIN cfgrole cr ON cr.role_id= sd.roleid
                 LEFT JOIN memberdetails md ON md.memberdetailsid = a.memberdetailsid
 
                 LEFT JOIN auth_status st
