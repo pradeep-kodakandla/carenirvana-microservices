@@ -241,9 +241,20 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     tmpl.authtemplatename AS ""AuthTemplateName"",
                     a.memberdetailsid AS ""MemberDetailsId"",
 
-                    COALESCE(a.authduedate, a.createdon + interval '10 days') AS ""AuthDueDate"",
+                    COALESCE(a.authduedate) AS ""AuthDueDate"",
                     COALESCE(ar.nextreviewdate, a.nextreviewdate) AS ""NextReviewDate"",
-
+                    CASE
+                        WHEN LOWER(COALESCE(st.authstatustext, '')) IN ('close', 'close and adjusted')
+                        THEN COALESCE(
+                            NULLIF(a.data::jsonb ->> 'authClosedDatetime', '')::timestamptz,
+                            NULLIF(a.data::jsonb ->> 'closeddatetime', '')::timestamptz,
+                            a.updatedon
+                        )
+                        ELSE COALESCE(
+                            NULLIF(a.data::jsonb ->> 'authClosedDatetime', '')::timestamptz,
+                            NULLIF(a.data::jsonb ->> 'closeddatetime', '')::timestamptz
+                        )
+                    END AS ""ClosedDateTime"",
                     tt.treatmenttext AS ""TreatementType"",
                     COALESCE(NULLIF(ap.requestprioritytext, ''), 'Standard') AS ""RequestPriority"",
                     NULL::text AS ""DataJson"",
