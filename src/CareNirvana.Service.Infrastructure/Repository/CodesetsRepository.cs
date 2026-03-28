@@ -1040,9 +1040,10 @@ namespace CareNirvana.Service.Infrastructure.Repository
         }
 
         public async Task<IReadOnlyList<AuthorizationSearchResult>> SearchAuthorizationsAsync(
-            string q,
-            int limit = 25,
-            CancellationToken ct = default)
+                    string q,
+                    int limit = 25,
+                    DateTime? dateOfIncident = null,
+                    CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 2)
                 return Array.Empty<AuthorizationSearchResult>();
@@ -1052,47 +1053,58 @@ namespace CareNirvana.Service.Infrastructure.Repository
             await using var conn = GetConnection();
             await conn.OpenAsync(ct);
 
-            const string sql = @"
+            // Either filter by dateOfIncident (createdon/updatedon) OR use the standard text search —
+            // never both at the same time.
+            var whereClause = dateOfIncident.HasValue
+                ? "(a.createdon >= @dateOfIncident OR a.updatedon >= @dateOfIncident)"
+                : "(a.authnumber::text ILIKE @starts OR at.authtemplatename ILIKE @contains)";
+
+            var sql = $@"
                 SELECT DISTINCT ON (a.authnumber)
                     a.authnumber::text                                     AS authnumber,
                     at.authtemplatename                                    AS authtype,
                     COALESCE(a.data->>'authClassId', a.authtypeid::text)    AS enrollmenthierarchy,
                     a.authstatus::text                                     AS overallstatus,
 
-                    a.data #>> '{icd1_icdCode,code}'                        AS icdcode,
+                    a.data #>> '{{icd1_icdCode,code}}'                        AS icdcode,
                     COALESCE(a.data->>'icd1_icdDescription',
-                             a.data #>> '{icd1_icdCode,codeDesc}')          AS icddescription,
+                             a.data #>> '{{icd1_icdCode,codeDesc}}')          AS icddescription,
 
-                    dd.elem #>> '{data,serviceCode}'                        AS servicecode,
-                    COALESCE(dd.elem #>> '{data,serviceDescription}',
-                             dd.elem #>> '{data,procedureDescription}')     AS servicedescription,
-                    dd.elem #>> '{data,reviewTypeLabel}'                    AS reviewtype,
+                    dd.elem #>> '{{data,serviceCode}}'                        AS servicecode,
+                    COALESCE(dd.elem #>> '{{data,serviceDescription}}',
+                             dd.elem #>> '{{data,procedureDescription}}')     AS servicedescription,
+                    dd.elem #>> '{{data,reviewTypeLabel}}'                    AS reviewtype,
 
-                    NULLIF(dd.elem #>> '{data,fromDate}', '')::timestamp    AS fromdate,
-                    NULLIF(dd.elem #>> '{data,toDate}', '')::timestamp      AS todate,
+                    NULLIF(dd.elem #>> '{{data,fromDate}}', '')::timestamp    AS fromdate,
+                    NULLIF(dd.elem #>> '{{data,toDate}}', '')::timestamp      AS todate,
 
-                    dd.elem #>> '{data,decisionStatusLabel}'                AS decisionstatus,
-                    dd.elem #>> '{data,newSelect_copy_bszkkn8o1Label}'       AS denialtype,
-                    dd.elem #>> '{data,newSelect_copy_3uon6b5w0Label}'       AS denialreason
+                    dd.elem #>> '{{data,decisionStatusLabel}}'                AS decisionstatus,
+                    dd.elem #>> '{{data,newSelect_copy_bszkkn8o1Label}}'       AS denialtype,
+                    dd.elem #>> '{{data,newSelect_copy_3uon6b5w0Label}}'       AS denialreason
 
                 FROM authdetail a
                 JOIN cfgauthtemplate at ON at.authtemplateid = a.authtypeid
                 LEFT JOIN LATERAL jsonb_array_elements(a.data->'decisionDetails') AS dd(elem) ON TRUE
-                WHERE
-                      a.authnumber::text ILIKE @starts
-                   OR at.authtemplatename ILIKE @contains
+                WHERE {whereClause}
                 ORDER BY
                     a.authnumber,
                     -- prefer updatedDateTime when present; it may be ISO with Z
-                    NULLIF(dd.elem #>> '{data,updatedDateTime}', '')::timestamptz DESC NULLS LAST,
-                    NULLIF(dd.elem #>> '{data,createdDateTime}', '')::timestamp DESC NULLS LAST,
-                    (dd.elem #>> '{data,procedureNo}')::int DESC NULLS LAST
+                    NULLIF(dd.elem #>> '{{data,updatedDateTime}}', '')::timestamptz DESC NULLS LAST,
+                    NULLIF(dd.elem #>> '{{data,createdDateTime}}', '')::timestamp DESC NULLS LAST,
+                    (dd.elem #>> '{{data,procedureNo}}')::int DESC NULLS LAST
                 LIMIT @limit;
             ";
 
             await using var cmd = new NpgsqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("starts", $"{q}%");
-            cmd.Parameters.AddWithValue("contains", $"%{q}%");
+            if (dateOfIncident.HasValue)
+            {
+                cmd.Parameters.AddWithValue("dateOfIncident", dateOfIncident.Value.Date);
+            }
+            else
+            {
+                cmd.Parameters.AddWithValue("starts", $"{q}%");
+                cmd.Parameters.AddWithValue("contains", $"%{q}%");
+            }
             cmd.Parameters.AddWithValue("limit", limit);
 
             var results = new List<AuthorizationSearchResult>(limit);
@@ -1126,9 +1138,18 @@ namespace CareNirvana.Service.Infrastructure.Repository
             return results;
         }
 
-        public async Task<string?> GetClaimJsonAsync(string claimNumber, CancellationToken ct = default)
+        public async Task<string?> GetClaimJsonAsync(
+            string claimNumber,
+            DateTime? dateOfIncident = null,
+            CancellationToken ct = default)
         {
-            const string sql = @"
+            // Either filter by dateOfIncident (createdon/updatedon) OR use the standard claimnumber lookup —
+            // never both at the same time.
+            var whereClause = dateOfIncident.HasValue
+                ? "(h.createdon  >= @dateOfIncident OR h.updatedon  >= @dateOfIncident)"
+                : "h.claimnumber = @claimnumber";
+
+            var sql = $@"
                             SELECT
                                 jsonb_build_object(
                                 'header', to_jsonb(h),
@@ -1175,14 +1196,21 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                 FROM memberclaimpayment p
                                 WHERE p.memberclaimheaderid = h.memberclaimheaderid
                             ) AS pays ON TRUE
-                            WHERE h.claimnumber = @claimnumber
+                            WHERE {whereClause}
                             LIMIT 1;";
 
             await using var conn = new NpgsqlConnection(_connectionString);
             await conn.OpenAsync(ct);
 
             await using var cmd = new NpgsqlCommand(sql, conn);
-            cmd.Parameters.AddWithValue("@claimnumber", claimNumber);
+            if (dateOfIncident.HasValue)
+            {
+                cmd.Parameters.AddWithValue("@dateOfIncident", dateOfIncident.Value.Date);
+            }
+            else
+            {
+                cmd.Parameters.AddWithValue("@claimnumber", claimNumber);
+            }
 
             var result = await cmd.ExecuteScalarAsync(ct);
             return result == null || result is DBNull ? null : (string)result;

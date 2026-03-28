@@ -401,13 +401,13 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 authAssignedTo = req.AuthAssignedTo; // don’t force for ACTIVITY here
 
             const string sql = @"
-        insert into authdetail
-            (authnumber, authtypeid, memberdetailsid, authduedate, nextreviewdate, treatementtype,
-             data, createdon, createdby, authclassid, authassignedto, authstatus)
-        values
-            (@authNumber, @authTypeId, @memberDetailsId, @authDueDate, @nextReviewDate, @treatementType,
-             @jsonData::jsonb, now(), @userId, @authClassId, @authAssignedTo, @authStatus)
-        returning authdetailid;";
+                insert into authdetail
+                    (authnumber, authtypeid, memberdetailsid, authduedate, nextreviewdate, treatementtype,
+                     data, createdon, createdby, authclassid, authassignedto, authstatus)
+                values
+                    (@authNumber, @authTypeId, @memberDetailsId, @authDueDate, @nextReviewDate, @treatementType,
+                     @jsonData::jsonb, now(), @userId, @authClassId, @authAssignedTo, @authStatus)
+                returning authdetailid;";
 
             await using var conn = CreateConn();
             var authDetailId = await conn.ExecuteScalarAsync<long>(sql, new
@@ -441,8 +441,6 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
             return authDetailId;
         }
-
-
 
         public async Task UpdateAuthAsync(long authDetailId, UpdateAuthRequest req, int userId)
         {

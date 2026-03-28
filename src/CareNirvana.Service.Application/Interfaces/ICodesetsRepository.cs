@@ -25,9 +25,9 @@ namespace CareNirvana.Service.Application.Interfaces
         Task<IReadOnlyList<ClaimSearchResult>> SearchClaimsAsync(string q, int limit = 25, CancellationToken ct = default);
         Task<ClaimDetailResult?> GetClaimByIdAsync(long memberClaimHeaderId, CancellationToken ct = default);
 
-        Task<IReadOnlyList<AuthorizationSearchResult>> SearchAuthorizationsAsync(string q, int limit = 25, CancellationToken ct = default);
+        Task<IReadOnlyList<AuthorizationSearchResult>> SearchAuthorizationsAsync(string q, int limit = 25, DateTime? dateOfIncident = null, CancellationToken ct = default);
 
-        Task<string?> GetClaimJsonAsync(string claimNumber, CancellationToken ct = default);
+        Task<string?> GetClaimJsonAsync(string claimNumber, DateTime? dateOfIncident = null, CancellationToken ct = default);
         Task<string?> GetProviderProfileJsonAsync(string providerId, CancellationToken ct = default);
         Task<string?> GetAuthDetailsJsonAsync(string authNumber, CancellationToken ct = default);
     }

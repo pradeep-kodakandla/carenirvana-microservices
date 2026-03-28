@@ -111,16 +111,16 @@ namespace CareNirvana.Service.API.Controllers
         }
 
         [HttpGet("search/authorizations")]
-        public async Task<IActionResult> SearchAuthorizations([FromQuery] string q, [FromQuery] int limit = 25, CancellationToken ct = default)
+        public async Task<IActionResult> SearchAuthorizations([FromQuery] string q, [FromQuery] int limit = 25, [FromQuery] DateTime? dateOfIncident = null, CancellationToken ct = default)
         {
-            var result = await _service.SearchAuthorizationsAsync(q, limit, ct);
+            var result = await _service.SearchAuthorizationsAsync(q, limit, dateOfIncident, ct);
             return Ok(result);
         }
 
         [HttpGet("claimjson/{claimNumber}")]
-        public async Task<IActionResult> GetClaimJson(string claimNumber, CancellationToken ct = default)
+        public async Task<IActionResult> GetClaimJson(string claimNumber, [FromQuery] DateTime? dateOfIncident = null, CancellationToken ct = default)
         {
-            var result = await _service.GetClaimJsonAsync(claimNumber, ct);
+            var result = await _service.GetClaimJsonAsync(claimNumber, dateOfIncident, ct);
             return result == null ? NotFound() : Ok(result);
         }
 
