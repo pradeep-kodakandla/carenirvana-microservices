@@ -111,9 +111,15 @@ namespace CareNirvana.Service.API.Controllers
         }
 
         [HttpGet("search/authorizations")]
-        public async Task<IActionResult> SearchAuthorizations([FromQuery] string q, [FromQuery] int limit = 25, [FromQuery] DateTime? dateOfIncident = null, CancellationToken ct = default)
+        public async Task<IActionResult> SearchAuthorizations(
+            [FromQuery] string q,
+            [FromQuery] long memberDetailId,
+            [FromQuery] int limit = 25,
+            [FromQuery] DateTime? dateOfIncident = null,
+            [FromQuery] int dayOffset = 0,
+            CancellationToken ct = default)
         {
-            var result = await _service.SearchAuthorizationsAsync(q, limit, dateOfIncident, ct);
+            var result = await _service.SearchAuthorizationsAsync(q, memberDetailId, limit, dateOfIncident, dayOffset, ct);
             return Ok(result);
         }
 

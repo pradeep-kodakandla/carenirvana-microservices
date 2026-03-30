@@ -1040,72 +1040,129 @@ namespace CareNirvana.Service.Infrastructure.Repository
         }
 
         public async Task<IReadOnlyList<AuthorizationSearchResult>> SearchAuthorizationsAsync(
-                    string q,
-                    int limit = 25,
-                    DateTime? dateOfIncident = null,
-                    CancellationToken ct = default)
+    string q,
+    long memberDetailId,
+    int limit = 25,
+    DateTime? dateOfIncident = null,
+    int dayOffset = 0,
+    CancellationToken ct = default)
         {
+            // ── DIAGNOSTIC ──
+            Console.WriteLine("=== [SearchAuthorizationsAsync] ===");
+            Console.WriteLine($"  q              : '{q}'");
+            Console.WriteLine($"  memberDetailId : {memberDetailId}{(memberDetailId == 0 ? " ⚠️ ZERO — no rows will match" : " ✅")}");
+            Console.WriteLine($"  limit          : {limit}");
+            Console.WriteLine($"  dateOfIncident : {(dateOfIncident.HasValue ? dateOfIncident.Value.ToString("yyyy-MM-dd") : "null (text search mode)")}");
+            Console.WriteLine($"  dayOffset      : {dayOffset}");
+
             if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 2)
+            {
+                Console.WriteLine("  ⚠️ EARLY EXIT — q is null/empty or less than 2 chars");
+                Console.WriteLine("=====================================");
                 return Array.Empty<AuthorizationSearchResult>();
+            }
 
             q = q.Trim();
 
             await using var conn = GetConnection();
             await conn.OpenAsync(ct);
 
-            // Either filter by dateOfIncident (createdon/updatedon) OR use the standard text search —
-            // never both at the same time.
-            var whereClause = dateOfIncident.HasValue
-                ? "(a.createdon >= @dateOfIncident OR a.updatedon >= @dateOfIncident)"
-                : "(a.authnumber::text ILIKE @starts OR at.authtemplatename ILIKE @contains)";
+            var dateOrTextCondition = dateOfIncident.HasValue
+                ? "AND NULLIF(dd.elem #>> '{data,fromDate}', '')::timestamp BETWEEN @dateFrom AND @dateTo"
+                : "AND (a.authnumber::text ILIKE @starts OR at.authtemplatename ILIKE @contains)";
 
             var sql = $@"
-                SELECT DISTINCT ON (a.authnumber)
-                    a.authnumber::text                                     AS authnumber,
-                    at.authtemplatename                                    AS authtype,
-                    COALESCE(a.data->>'authClassId', a.authtypeid::text)    AS enrollmenthierarchy,
-                    a.authstatus::text                                     AS overallstatus,
+        SELECT DISTINCT ON (a.authnumber)
+            a.authnumber::text                                      AS authnumber,
+            at.authtemplatename                                     AS authtype,
+            COALESCE(a.data->>'authClassId', a.authtypeid::text)    AS enrollmenthierarchy,
+            a.authstatus::text                                      AS overallstatus,
 
-                    a.data #>> '{{icd1_icdCode,code}}'                        AS icdcode,
-                    COALESCE(a.data->>'icd1_icdDescription',
-                             a.data #>> '{{icd1_icdCode,codeDesc}}')          AS icddescription,
+            a.data #>> '{{icd1_icdCode,code}}'                      AS icdcode,
+            COALESCE(a.data->>'icd1_icdDescription',
+                     a.data #>> '{{icd1_icdCode,codeDesc}}')        AS icddescription,
 
-                    dd.elem #>> '{{data,serviceCode}}'                        AS servicecode,
-                    COALESCE(dd.elem #>> '{{data,serviceDescription}}',
-                             dd.elem #>> '{{data,procedureDescription}}')     AS servicedescription,
-                    dd.elem #>> '{{data,reviewTypeLabel}}'                    AS reviewtype,
+            dd.elem #>> '{{data,serviceCode}}'                      AS servicecode,
+            COALESCE(dd.elem #>> '{{data,serviceDescription}}',
+                     dd.elem #>> '{{data,procedureDescription}}')   AS servicedescription,
+            dd.elem #>> '{{data,reviewTypeLabel}}'                  AS reviewtype,
 
-                    NULLIF(dd.elem #>> '{{data,fromDate}}', '')::timestamp    AS fromdate,
-                    NULLIF(dd.elem #>> '{{data,toDate}}', '')::timestamp      AS todate,
+            NULLIF(dd.elem #>> '{{data,fromDate}}', '')::timestamp  AS fromdate,
+            NULLIF(dd.elem #>> '{{data,toDate}}',   '')::timestamp  AS todate,
 
-                    dd.elem #>> '{{data,decisionStatusLabel}}'                AS decisionstatus,
-                    dd.elem #>> '{{data,newSelect_copy_bszkkn8o1Label}}'       AS denialtype,
-                    dd.elem #>> '{{data,newSelect_copy_3uon6b5w0Label}}'       AS denialreason
+            dd.elem #>> '{{data,decisionStatusLabel}}'              AS decisionstatus,
+            dd.elem #>> '{{data,newSelect_copy_bszkkn8o1Label}}'    AS denialtype,
+            dd.elem #>> '{{data,newSelect_copy_3uon6b5w0Label}}'    AS denialreason
 
-                FROM authdetail a
-                JOIN cfgauthtemplate at ON at.authtemplateid = a.authtypeid
-                LEFT JOIN LATERAL jsonb_array_elements(a.data->'decisionDetails') AS dd(elem) ON TRUE
-                WHERE {whereClause}
-                ORDER BY
-                    a.authnumber,
-                    -- prefer updatedDateTime when present; it may be ISO with Z
-                    NULLIF(dd.elem #>> '{{data,updatedDateTime}}', '')::timestamptz DESC NULLS LAST,
-                    NULLIF(dd.elem #>> '{{data,createdDateTime}}', '')::timestamp DESC NULLS LAST,
-                    (dd.elem #>> '{{data,procedureNo}}')::int DESC NULLS LAST
-                LIMIT @limit;
-            ";
+        FROM authdetail a
+        JOIN cfgauthtemplate at ON at.authtemplateid = a.authtypeid
+        LEFT JOIN LATERAL jsonb_array_elements(a.data->'decisionDetails') AS dd(elem) ON TRUE
+        WHERE a.memberdetailsid = @memberDetailId
+        {dateOrTextCondition}
+        ORDER BY
+            a.authnumber,
+            NULLIF(dd.elem #>> '{{data,updatedDateTime}}', '')::timestamptz DESC NULLS LAST,
+            NULLIF(dd.elem #>> '{{data,createdDateTime}}', '')::timestamp    DESC NULLS LAST,
+            (dd.elem #>> '{{data,procedureNo}}')::int                        DESC NULLS LAST
+        LIMIT @limit;
+    ";
 
             await using var cmd = new NpgsqlCommand(sql, conn);
+
+            cmd.Parameters.AddWithValue("memberDetailId", memberDetailId);
+
             if (dateOfIncident.HasValue)
             {
-                cmd.Parameters.AddWithValue("dateOfIncident", dateOfIncident.Value.Date);
+                var anchorDate = dateOfIncident.Value.Date;
+                var absOffset = Math.Abs(dayOffset);
+                var dateFrom = anchorDate.AddDays(-absOffset);
+                var dateTo = anchorDate.AddDays(absOffset);
+                var dateToEnd = dateTo.AddDays(1).AddTicks(-1);
+
+                cmd.Parameters.AddWithValue("dateFrom", dateFrom);
+                cmd.Parameters.AddWithValue("dateTo", dateToEnd);
+
+                Console.WriteLine($"  mode           : DATE WINDOW");
+                Console.WriteLine($"  anchorDate     : {anchorDate:yyyy-MM-dd}");
+                Console.WriteLine($"  absOffset      : {absOffset}");
+                Console.WriteLine($"  dateFrom       : {dateFrom:yyyy-MM-dd}");
+                Console.WriteLine($"  dateTo         : {dateToEnd:yyyy-MM-dd HH:mm:ss.fffffff}");
             }
             else
             {
                 cmd.Parameters.AddWithValue("starts", $"{q}%");
                 cmd.Parameters.AddWithValue("contains", $"%{q}%");
+
+                Console.WriteLine($"  mode           : TEXT SEARCH");
+                Console.WriteLine($"  starts         : '{q}%'");
+                Console.WriteLine($"  contains       : '%{q}%'");
             }
+
             cmd.Parameters.AddWithValue("limit", limit);
+
+            // Print the full SQL with parameter values substituted for easy copy-paste into psql
+            var debugSql = sql
+                .Replace("@memberDetailId", memberDetailId.ToString())
+                .Replace("@limit", limit.ToString());
+
+            if (dateOfIncident.HasValue)
+            {
+                var anchorDate = dateOfIncident.Value.Date;
+                var absOffset = Math.Abs(dayOffset);
+                debugSql = debugSql
+                    .Replace("@dateFrom", $"'{anchorDate.AddDays(-absOffset):yyyy-MM-dd}'")
+                    .Replace("@dateTo", $"'{anchorDate.AddDays(absOffset).AddDays(1).AddTicks(-1):yyyy-MM-dd HH:mm:ss}'");
+            }
+            else
+            {
+                debugSql = debugSql
+                    .Replace("@starts", $"'{q}%'")
+                    .Replace("@contains", $"'%{q}%'");
+            }
+
+            Console.WriteLine($"  --- SQL (copy-paste ready) ---");
+            Console.WriteLine(debugSql);
+            Console.WriteLine("=====================================");
 
             var results = new List<AuthorizationSearchResult>(limit);
 
@@ -1134,6 +1191,9 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     denialreason = reader["denialreason"]?.ToString(),
                 });
             }
+
+            Console.WriteLine($"  ✅ rows returned : {results.Count}");
+            Console.WriteLine("=====================================");
 
             return results;
         }

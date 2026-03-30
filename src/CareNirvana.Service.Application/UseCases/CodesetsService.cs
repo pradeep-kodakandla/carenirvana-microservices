@@ -78,9 +78,15 @@ namespace CareNirvana.Service.Application.UseCases
             return _repository.GetClaimByIdAsync(memberClaimHeaderId, ct);
         }
 
-        public Task<IReadOnlyList<AuthorizationSearchResult>> SearchAuthorizationsAsync(string q, int limit = 25, DateTime? dateOfIncident = null, CancellationToken ct = default)
+        public Task<IReadOnlyList<AuthorizationSearchResult>> SearchAuthorizationsAsync(
+            string q,
+            long memberDetailId,
+            int limit = 25,
+            DateTime? dateOfIncident = null,
+            int dayOffset = 0,
+            CancellationToken ct = default)
         {
-            return _repository.SearchAuthorizationsAsync(q, limit, dateOfIncident, ct);
+            return _repository.SearchAuthorizationsAsync(q, memberDetailId, limit, dateOfIncident, dayOffset, ct);
         }
 
         public Task<string?> GetClaimJsonAsync(string claimNumber, DateTime? dateOfIncident = null, CancellationToken ct = default)
