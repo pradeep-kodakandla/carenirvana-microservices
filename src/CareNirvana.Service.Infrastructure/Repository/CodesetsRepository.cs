@@ -1047,20 +1047,6 @@ namespace CareNirvana.Service.Infrastructure.Repository
     int dayOffset = 0,
     CancellationToken ct = default)
         {
-            // ── DIAGNOSTIC ──
-            Console.WriteLine("=== [SearchAuthorizationsAsync] ===");
-            Console.WriteLine($"  q              : '{q}'");
-            Console.WriteLine($"  memberDetailId : {memberDetailId}{(memberDetailId == 0 ? " ⚠️ ZERO — no rows will match" : " ✅")}");
-            Console.WriteLine($"  limit          : {limit}");
-            Console.WriteLine($"  dateOfIncident : {(dateOfIncident.HasValue ? dateOfIncident.Value.ToString("yyyy-MM-dd") : "null (text search mode)")}");
-            Console.WriteLine($"  dayOffset      : {dayOffset}");
-
-            if (string.IsNullOrWhiteSpace(q) || q.Trim().Length < 2)
-            {
-                Console.WriteLine("  ⚠️ EARLY EXIT — q is null/empty or less than 2 chars");
-                Console.WriteLine("=====================================");
-                return Array.Empty<AuthorizationSearchResult>();
-            }
 
             q = q.Trim();
 
@@ -1072,7 +1058,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 : "AND (a.authnumber::text ILIKE @starts OR at.authtemplatename ILIKE @contains)";
 
             var sql = $@"
-        SELECT DISTINCT ON (a.authnumber)
+        SELECT 
             a.authnumber::text                                      AS authnumber,
             at.authtemplatename                                     AS authtype,
             COALESCE(a.data->>'authClassId', a.authtypeid::text)    AS enrollmenthierarchy,
@@ -1160,9 +1146,6 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     .Replace("@contains", $"'%{q}%'");
             }
 
-            Console.WriteLine($"  --- SQL (copy-paste ready) ---");
-            Console.WriteLine(debugSql);
-            Console.WriteLine("=====================================");
 
             var results = new List<AuthorizationSearchResult>(limit);
 
@@ -1192,8 +1175,6 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 });
             }
 
-            Console.WriteLine($"  ✅ rows returned : {results.Count}");
-            Console.WriteLine("=====================================");
 
             return results;
         }
