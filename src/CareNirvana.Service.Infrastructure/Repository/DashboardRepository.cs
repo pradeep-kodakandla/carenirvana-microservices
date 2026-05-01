@@ -177,7 +177,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                    WHERE ch.createdby = @userId
                   ) AS casecount,
 
-                  (SELECT COUNT(*) FROM public.faxfiles where deletedby is null) AS faxcount;
+                  (SELECT COUNT(*) FROM public.faxfiles where status != 'Processed' and deletedby is null) AS faxcount;
                 ";
 
             using var cmd = new NpgsqlCommand(sql, connection);
