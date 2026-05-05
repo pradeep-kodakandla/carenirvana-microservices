@@ -76,109 +76,167 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
             // One round-trip: compute all counts using scalar subqueries
             const string sql = @"
-           SELECT
-                  (SELECT COUNT(DISTINCT m.memberdetailsid)
-                   FROM public.membercarestaff m
-                   WHERE m.userid = @userId
-                     AND COALESCE(m.activeflag, true) = true
-                  ) AS mymembercount,
+   SELECT
+          (SELECT COUNT(DISTINCT m.memberdetailsid)
+           FROM public.membercarestaff m
+           WHERE m.userid = @userId
+             AND COALESCE(m.activeflag, true) = true
+          ) AS mymembercount,
 
-                  (SELECT COUNT(*)
-                   FROM public.authdetail a
-                   WHERE a.authassignedto = @userId
-                  ) AS authcount,
+          (SELECT COUNT(*)
+           FROM public.authdetail a
+           WHERE a.authassignedto = @userId
+          ) AS authcount,
 
-                  (
-                    WITH pending AS (
-
-                      -- CM
-                      SELECT DISTINCT maw.memberactivityworkgroupid AS item_id
-                      FROM cfguserworkgroup cug
-                      JOIN cfgworkgroupworkbasket cww
+          (
+            SELECT COUNT(*) FROM (
+                (
+                    -- =========================
+                    -- CM
+                    -- =========================
+                    SELECT DISTINCT
+                        'CM'                          AS module,
+                        md.memberdetailsid            AS memberdetailsid,
+                        ma.createdon                  AS createdon,
+                        ma.statusid                   AS statusid,
+                        NULL::text                    AS authnumber,
+                        wg.workgroupid                AS workgroupid,
+                        wb.workbasketid               AS workbasketid,
+                        maw.memberactivityworkgroupid AS itemid
+                    FROM cfguserworkgroup cug
+                    JOIN cfgworkgroupworkbasket cww
                         ON cww.workgroupworkbasketid = cug.workgroupworkbasketid
-                      JOIN memberactivityworkgroup maw
+                    JOIN cfgworkgroup wg
+                        ON wg.workgroupid = cww.workgroupid
+                    JOIN cfgworkbasket wb
+                        ON wb.workbasketid = cww.workbasketid
+                    JOIN memberactivityworkgroup maw
                         ON maw.workgroupworkbasketid = cug.workgroupworkbasketid
-                      JOIN memberactivity ma
+                    JOIN memberactivity ma
                         ON ma.memberactivityid = maw.memberactivityid
-                      WHERE COALESCE(cug.activeflag, TRUE) = TRUE
-                        AND COALESCE(maw.activeflag, TRUE) = TRUE
-                        AND (@userId IS NULL OR cug.userid = @userId)
-                        AND ma.referto IS NULL
-                        AND ma.isworkbasket = TRUE
-                        AND ma.deletedon IS NULL
-                        AND COALESCE(ma.activeflag, TRUE) = TRUE
+                    JOIN memberdetails md
+                        ON md.memberdetailsid = ma.memberdetailsid
+                    WHERE COALESCE(cug.activeflag, TRUE) = TRUE
+                      AND COALESCE(maw.activeflag, TRUE) = TRUE
+                      -- AND (@userId IS NULL OR cug.userid = @userId)
+                      AND ma.referto IS NULL
+                      AND ma.isworkbasket = TRUE
+                      AND ma.deletedon IS NULL
+                      AND COALESCE(ma.activeflag, TRUE) = TRUE
+                )
 
-                      UNION ALL
+                UNION ALL
 
-                      -- UM (AUTH)
-                      SELECT DISTINCT awg.authworkgroupid AS item_id
-                      FROM cfguserworkgroup cug
-                      JOIN cfgworkgroupworkbasket cww
+                (
+                    -- =========================
+                    -- UM (AUTH pending in WG/WB pool)
+                    -- =========================
+                    SELECT DISTINCT
+                        'UM'              AS module,
+                        md.memberdetailsid,
+                        a.createdon,
+                        a.authstatus      AS statusid,
+                        a.authnumber      AS authnumber,
+                        wg.workgroupid,
+                        wb.workbasketid,
+                        awg.authworkgroupid AS itemid
+                    FROM cfguserworkgroup cug
+                    JOIN cfgworkgroupworkbasket cww
                         ON cww.workgroupworkbasketid = cug.workgroupworkbasketid
-                      JOIN authworkgroup awg
+                    JOIN cfgworkgroup wg
+                        ON wg.workgroupid = cww.workgroupid
+                    JOIN cfgworkbasket wb
+                        ON wb.workbasketid = cww.workbasketid
+                    JOIN authworkgroup awg
                         ON awg.workgroupworkbasketid = cug.workgroupworkbasketid
                        AND awg.requesttype = 'AUTH'
                        AND COALESCE(awg.activeflag, TRUE) = TRUE
-                      JOIN authdetail a
+                    JOIN authdetail a
                         ON a.authdetailid = awg.authdetailid
-                      WHERE COALESCE(cug.activeflag, TRUE) = TRUE
-                        AND (@userId IS NULL OR cug.userid = @userId)
-                        AND a.deletedon IS NULL
-                        AND a.authassignedto IS NULL
-                        AND NOT EXISTS (
+                    JOIN memberdetails md
+                        ON md.memberdetailsid = a.memberdetailsid
+                    WHERE COALESCE(cug.activeflag, TRUE) = TRUE
+                      -- AND (@userId IS NULL OR cug.userid = @userId)
+                      AND a.deletedon IS NULL
+                      AND a.authassignedto IS NULL
+                      AND NOT EXISTS (
                           SELECT 1
                           FROM authworkgroupaction awa
                           WHERE awa.authworkgroupid = awg.authworkgroupid
                             AND COALESCE(awa.activeflag, TRUE) = TRUE
                             AND upper(awa.actiontype) IN ('ACCEPT','ACCEPTED')
                           LIMIT 1
-                        )
+                      )
+                )
 
-                      UNION ALL
+                UNION ALL
 
-                      -- AG (CASE)
-                      SELECT DISTINCT cw.caseworkgroupid AS item_id
-                      FROM cfguserworkgroup cug
-                      JOIN cfgworkgroupworkbasket cww
+                (
+                    -- =========================
+                    -- AG (CASE pending in WG/WB pool)
+                    -- =========================
+                    SELECT DISTINCT
+                        'AG'                AS module,
+                        md.memberdetailsid,
+                        cd.createdon,
+                        NULL::int           AS statusid,
+                        ch.casenumber       AS authnumber,
+                        wg.workgroupid,
+                        wb.workbasketid,
+                        cw.caseworkgroupid  AS itemid
+                    FROM cfguserworkgroup cug
+                    JOIN cfgworkgroupworkbasket cww
                         ON cww.workgroupworkbasketid = cug.workgroupworkbasketid
-                      JOIN caseworkgroup cw
+                    JOIN cfgworkgroup wg
+                        ON wg.workgroupid = cww.workgroupid
+                    JOIN cfgworkbasket wb
+                        ON wb.workbasketid = cww.workbasketid
+                    JOIN caseworkgroup cw
                         ON cw.workgroupworkbasketid = cug.workgroupworkbasketid
                        AND cw.requesttype = 'CASE'
                        AND COALESCE(cw.activeflag, TRUE) = TRUE
-                      WHERE COALESCE(cug.activeflag, TRUE) = TRUE
-                        AND (@userId IS NULL OR cug.userid = @userId)
-                        AND NOT EXISTS (
+                    LEFT JOIN casedetail cd
+                        ON cd.caseheaderid = cw.caseheaderid
+                       AND cd.caselevelid  = cw.caselevelid
+                       AND cd.deletedon IS NULL
+                    LEFT JOIN caseheader ch
+                        ON ch.caseheaderid = cw.caseheaderid
+                    LEFT JOIN memberdetails md
+                        ON md.memberdetailsid = ch.memberdetailid
+                    WHERE COALESCE(cug.activeflag, TRUE) = TRUE
+                      -- AND (@userId IS NULL OR cug.userid = @userId)
+                      AND NOT EXISTS (
                           SELECT 1
                           FROM caseworkgroupaction cwa
                           WHERE cwa.caseworkgroupid = cw.caseworkgroupid
                             AND COALESCE(cwa.activeflag, TRUE) = TRUE
                             AND upper(cwa.actiontype) IN ('ACCEPT','ACCEPTED')
                           LIMIT 1
-                        )
-                    )
-                    SELECT COUNT(*) FROM pending
-                  ) AS requestcount,
+                      )
+                )
+            ) AS pending
+          ) AS requestcount,
 
-                  (SELECT COUNT(*)
-                   FROM public.authactivity aa
-                   WHERE aa.referto = @userId
-                     AND aa.service_line_count = 0
-                  ) AS activitycount,
+          (SELECT COUNT(*)
+           FROM public.authactivity aa
+           WHERE aa.referto = @userId
+             AND aa.service_line_count = 0
+          ) AS activitycount,
 
-                  (SELECT COUNT(*)
-                   FROM public.authactivity aa
-                   WHERE aa.referto = @userId
-                     AND aa.service_line_count <> 0
-                     AND md_review_status <> 'Approved'
-                  ) AS wqcount,
+          (SELECT COUNT(*)
+           FROM public.authactivity aa
+           WHERE aa.referto = @userId
+             AND aa.service_line_count <> 0
+             AND md_review_status <> 'Approved'
+          ) AS wqcount,
 
-                  (SELECT COUNT(*)
-                   FROM public.CASEHEADER ch
-                   WHERE ch.createdby = @userId
-                  ) AS casecount,
+          (SELECT COUNT(*)
+           FROM public.CASEHEADER ch
+           WHERE ch.createdby = @userId
+          ) AS casecount,
 
-                  (SELECT COUNT(*) FROM public.faxfiles where status != 'Processed' and deletedby is null) AS faxcount;
-                ";
+          (SELECT COUNT(*) FROM public.faxfiles where status != 'Processed' and deletedby is null) AS faxcount;
+        ";
 
             using var cmd = new NpgsqlCommand(sql, connection);
             cmd.Parameters.AddWithValue("@userId", userId);
