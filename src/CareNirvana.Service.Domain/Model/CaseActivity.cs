@@ -48,8 +48,12 @@ namespace CareNirvana.Service.Domain.Model
         public int? ReferTo { get; set; }
         public string? Comment { get; set; }
 
+        // Group request related values
+        public int[] WorkGroupWorkBasketIds { get; set; } = Array.Empty<int>();
+        public int[] WorkGroupIds { get; set; } = Array.Empty<int>();
+        public int[] WorkBasketIds { get; set; } = Array.Empty<int>();
         // computed
-        public string RequestStatus { get; set; } = "OPEN"; // OPEN/REQUESTED/ACCEPTED/REJECTED
+        public string RequestStatus { get; set; } = "In Progress"; // In Progress/REQUESTED/ACCEPTED/REJECTED
     }
 
     public sealed class CaseActivityCreateDto
@@ -62,6 +66,7 @@ namespace CareNirvana.Service.Domain.Model
         public int? PriorityId { get; set; }
         public DateTime? FollowUpDateTime { get; set; }
         public DateTime? DueDate { get; set; }
+        public int? ReferTo { get; set; }
         public string? Comment { get; set; }
         public int? StatusId { get; set; }
 

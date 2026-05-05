@@ -31,51 +31,83 @@ namespace CareNirvana.Service.Infrastructure.Repository
             int caseHeaderId, int memberDetailsId, int caseLevelId, string status, CancellationToken ct)
         {
             const string sql = @"
+                SELECT
+                  ca.caseactivityid        AS CaseActivityId,
+                  ca.caseheaderid          AS CaseHeaderId,
+                  ca.memberdetailsid       AS MemberDetailsId,
+                  ca.caselevelid           AS CaseLevelId,
+                  ca.activitytypeid        AS ActivityTypeId,
+                  ca.priorityid            AS PriorityId,
+                  ca.followupdatetime      AS FollowUpDateTime,
+                  ca.duedate               AS DueDate,
+                  ca.referto               AS ReferTo,
+                  ca.comment               AS Comment,
+
+                  wg.workgroupworkbasketids AS WorkGroupWorkBasketIds,
+                  wg.workgroupids           AS WorkGroupIds,
+                  wg.workbasketids          AS WorkBasketIds,
+
+                  CASE
+                    WHEN ca.referto IS NOT NULL THEN 'In Progress'
+                    WHEN EXISTS (
+                      SELECT 1
+                      FROM public.caseworkgroup cw
+                      WHERE cw.requesttype = 'ACTIVITY'
+                        AND cw.caseactivityid = ca.caseactivityid
+                        AND cw.activeflag = true
+                        AND cw.groupstatusid = @Requested
+                    ) THEN 'REQUESTED'
+                    WHEN EXISTS (
+                      SELECT 1
+                      FROM public.caseworkgroup cw
+                      WHERE cw.requesttype = 'ACTIVITY'
+                        AND cw.caseactivityid = ca.caseactivityid
+                        AND cw.activeflag = true
+                    )
+                    AND NOT EXISTS (
+                      SELECT 1
+                      FROM public.caseworkgroup cw
+                      WHERE cw.requesttype = 'ACTIVITY'
+                        AND cw.caseactivityid = ca.caseactivityid
+                        AND cw.activeflag = true
+                        AND cw.groupstatusid <> @Rejected
+                    ) THEN 'REJECTED'
+                    ELSE 'OPEN'
+                  END AS RequestStatus
+                FROM public.caseactivity ca
+                LEFT JOIN LATERAL
+                (
                     SELECT
-                      ca.caseactivityid        AS CaseActivityId,
-                      ca.caseheaderid          AS CaseHeaderId,
-                      ca.memberdetailsid       AS MemberDetailsId,
-                      ca.caselevelid           AS CaseLevelId,
-                      ca.activitytypeid        AS ActivityTypeId,
-                      ca.priorityid            AS PriorityId,
-                      ca.followupdatetime      AS FollowUpDateTime,
-                      ca.duedate               AS DueDate,
-                      ca.referto               AS ReferTo,
-                      ca.comment               AS Comment,
-                      CASE
-                        WHEN ca.referto IS NOT NULL THEN 'ACCEPTED'
-                        WHEN EXISTS (
-                          SELECT 1
-                          FROM public.caseworkgroup cw
-                          WHERE cw.requesttype = 'ACTIVITY'
-                            AND cw.caseactivityid = ca.caseactivityid
-                            AND cw.activeflag = true
-                            AND cw.groupstatusid = @Requested
-                        ) THEN 'REQUESTED'
-                        WHEN EXISTS (
-                          SELECT 1
-                          FROM public.caseworkgroup cw
-                          WHERE cw.requesttype = 'ACTIVITY'
-                            AND cw.caseactivityid = ca.caseactivityid
-                            AND cw.activeflag = true
-                        )
-                        AND NOT EXISTS (
-                          SELECT 1
-                          FROM public.caseworkgroup cw
-                          WHERE cw.requesttype = 'ACTIVITY'
-                            AND cw.caseactivityid = ca.caseactivityid
-                            AND cw.activeflag = true
-                            AND cw.groupstatusid <> @Rejected
-                        ) THEN 'REJECTED'
-                        ELSE 'OPEN'
-                      END AS RequestStatus
-                    FROM public.caseactivity ca
-                    WHERE ca.activeflag = true
-                      AND ca.caseheaderid = @CaseHeaderId
-                      AND ca.memberdetailsid = @MemberDetailsId
-                      AND ca.caselevelid = @CaseLevelId
-                    ORDER BY ca.createdon DESC;
-                    ";
+                      COALESCE(
+                        ARRAY_AGG(DISTINCT cw.workgroupworkbasketid)
+                          FILTER (WHERE cw.workgroupworkbasketid IS NOT NULL),
+                        ARRAY[]::int[]
+                      ) AS workgroupworkbasketids,
+
+                      COALESCE(
+                        ARRAY_AGG(DISTINCT wgw.workgroupid)
+                          FILTER (WHERE wgw.workgroupid IS NOT NULL),
+                        ARRAY[]::int[]
+                      ) AS workgroupids,
+
+                      COALESCE(
+                        ARRAY_AGG(DISTINCT wgw.workbasketid)
+                          FILTER (WHERE wgw.workbasketid IS NOT NULL),
+                        ARRAY[]::int[]
+                      ) AS workbasketids
+                    FROM public.caseworkgroup cw
+                    LEFT JOIN public.cfgworkgroupworkbasket wgw
+                      ON wgw.workgroupworkbasketid = cw.workgroupworkbasketid
+                    WHERE cw.requesttype = 'ACTIVITY'
+                      AND cw.caseactivityid = ca.caseactivityid
+                      AND cw.activeflag = true
+                ) wg ON true
+                WHERE ca.activeflag = true
+                  AND ca.caseheaderid = @CaseHeaderId
+                  AND ca.memberdetailsid = @MemberDetailsId
+                  AND ca.caselevelid = @CaseLevelId
+                ORDER BY ca.createdon DESC;
+                ";
 
             using var conn = Open();
             var rows = (await conn.QueryAsync<CaseActivityRowDto>(
@@ -105,34 +137,81 @@ namespace CareNirvana.Service.Infrastructure.Repository
         {
             const string sql = @"
                 SELECT
-                  ca.caseactivityid AS CaseActivityId,
-                  ca.caseheaderid   AS CaseHeaderId,
-                  ca.memberdetailsid AS MemberDetailsId,
-                  ca.caselevelid    AS CaseLevelId,
-                  ca.activitytypeid AS ActivityTypeId,
-                  ca.priorityid     AS PriorityId,
-                  ca.followupdatetime AS FollowUpDateTime,
-                  ca.duedate        AS DueDate,
-                  ca.referto        AS ReferTo,
-                  ca.comment        AS Comment,
+                  ca.caseactivityid        AS CaseActivityId,
+                  ca.caseheaderid          AS CaseHeaderId,
+                  ca.memberdetailsid       AS MemberDetailsId,
+                  ca.caselevelid           AS CaseLevelId,
+                  ca.activitytypeid        AS ActivityTypeId,
+                  ca.priorityid            AS PriorityId,
+                  ca.followupdatetime      AS FollowUpDateTime,
+                  ca.duedate               AS DueDate,
+                  ca.referto               AS ReferTo,
+                  ca.comment               AS Comment,
+
+                  wg.workgroupworkbasketids AS WorkGroupWorkBasketIds,
+                  wg.workgroupids           AS WorkGroupIds,
+                  wg.workbasketids          AS WorkBasketIds,
+
                   CASE
-                    WHEN ca.referto IS NOT NULL THEN 'ACCEPTED'
+                    WHEN ca.referto IS NOT NULL THEN 'In Progress'
                     WHEN EXISTS (
-                      SELECT 1 FROM public.caseworkgroup cw
-                      WHERE cw.requesttype='ACTIVITY' AND cw.caseactivityid=ca.caseactivityid AND cw.activeflag=true AND cw.groupstatusid=@Requested
+                      SELECT 1
+                      FROM public.caseworkgroup cw
+                      WHERE cw.requesttype = 'ACTIVITY'
+                        AND cw.caseactivityid = ca.caseactivityid
+                        AND cw.activeflag = true
+                        AND cw.groupstatusid = @Requested
                     ) THEN 'REQUESTED'
                     WHEN EXISTS (
-                      SELECT 1 FROM public.caseworkgroup cw
-                      WHERE cw.requesttype='ACTIVITY' AND cw.caseactivityid=ca.caseactivityid AND cw.activeflag=true
+                      SELECT 1
+                      FROM public.caseworkgroup cw
+                      WHERE cw.requesttype = 'ACTIVITY'
+                        AND cw.caseactivityid = ca.caseactivityid
+                        AND cw.activeflag = true
                     )
                     AND NOT EXISTS (
-                      SELECT 1 FROM public.caseworkgroup cw
-                      WHERE cw.requesttype='ACTIVITY' AND cw.caseactivityid=ca.caseactivityid AND cw.activeflag=true AND cw.groupstatusid <> @Rejected
+                      SELECT 1
+                      FROM public.caseworkgroup cw
+                      WHERE cw.requesttype = 'ACTIVITY'
+                        AND cw.caseactivityid = ca.caseactivityid
+                        AND cw.activeflag = true
+                        AND cw.groupstatusid <> @Rejected
                     ) THEN 'REJECTED'
                     ELSE 'OPEN'
                   END AS RequestStatus
                 FROM public.caseactivity ca
-                WHERE ca.caseactivityid=@CaseActivityId AND ca.activeflag=true;
+                LEFT JOIN LATERAL
+                (
+                    SELECT
+                      COALESCE(
+                        ARRAY_AGG(DISTINCT cw.workgroupworkbasketid)
+                          FILTER (WHERE cw.workgroupworkbasketid IS NOT NULL),
+                        ARRAY[]::int[]
+                      ) AS workgroupworkbasketids,
+
+                      COALESCE(
+                        ARRAY_AGG(DISTINCT wgw.workgroupid)
+                          FILTER (WHERE wgw.workgroupid IS NOT NULL),
+                        ARRAY[]::int[]
+                      ) AS workgroupids,
+
+                      COALESCE(
+                        ARRAY_AGG(DISTINCT wgw.workbasketid)
+                          FILTER (WHERE wgw.workbasketid IS NOT NULL),
+                        ARRAY[]::int[]
+                      ) AS workbasketids
+                    FROM public.caseworkgroup cw
+                    LEFT JOIN public.cfgworkgroupworkbasket wgw
+                      ON wgw.workgroupworkbasketid = cw.workgroupworkbasketid
+                    WHERE cw.requesttype = 'ACTIVITY'
+                      AND cw.caseactivityid = ca.caseactivityid
+                      AND cw.activeflag = true
+                ) wg ON true
+                WHERE ca.activeflag = true
+                  AND ca.caseheaderid = @CaseHeaderId
+                  AND ca.memberdetailsid = @MemberDetailsId
+                  AND ca.caselevelid = @CaseLevelId
+                ORDER BY ca.createdon DESC;
                 ";
             using var conn = Open();
             return await conn.QueryFirstOrDefaultAsync<CaseActivityRowDto>(
@@ -164,7 +243,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     (
                       @CaseHeaderId, @MemberDetailsId, @CaseLevelId,
                       @ActivityTypeId, @PriorityId, @FollowUpDateTime, @DueDate,
-                      NULL, @Comment, @StatusId,
+                      @ReferTo, @Comment, @StatusId,
                       true, CURRENT_TIMESTAMP, @CreatedBy
                     )
                     RETURNING caseactivityid;
@@ -181,6 +260,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                         dto.PriorityId,
                         dto.FollowUpDateTime,
                         dto.DueDate,
+                        dto.ReferTo,
                         dto.Comment,
                         dto.StatusId,
                         dto.CreatedBy

@@ -68,6 +68,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 ra.complaintdetailid         AS ComplaintDetailId,
 				md.memberid					 AS MemberId,
 				ad.authnumber				 AS AuthNumber,
+                ch.casenumber				 AS CaseNumber,
                 concat(md.firstname, ' ', md.lastname) AS membername
 				
             FROM public.recentlyaccessed ra
@@ -79,6 +80,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
 					ON md.memberdetailsid = ra.memberdetailsid
 			LEFT JOIN authdetail ad 
 					on ad.authdetailid = ra.authdetailid
+            LEFT JOIN caseheader ch 
+					on ch.caseheaderid = ra.complaintdetailid
             WHERE ra.userid = @UserId
               AND (@FromUtc IS NULL OR ra.accesseddatetime >= @FromUtc)
               AND (@ToUtc   IS NULL OR ra.accesseddatetime <  @ToUtc)

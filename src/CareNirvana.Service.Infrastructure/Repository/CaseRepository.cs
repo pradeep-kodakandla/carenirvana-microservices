@@ -563,6 +563,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                                   CROSS JOIN LATERAL jsonb_array_elements(admin.j -> 'casepriority') x
                                 )
                                 SELECT
+                                  ch.caseheaderid                                AS ""CaseHeaderId"",
                                   ch.casenumber                                  AS ""CaseNumber"",
                                   ch.memberdetailid                              AS ""MemberDetailId"",
                                   ch.casetype::text                              AS ""CaseType"",

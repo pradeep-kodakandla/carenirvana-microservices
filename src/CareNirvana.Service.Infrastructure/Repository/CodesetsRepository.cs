@@ -454,7 +454,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
                     su.username,
                     sud.firstname as firstName,
                     sud.lastname as lastName,
-                    coalesce( su.username || '@carenirvana.io') as email,
+                    coalesce( su.username || '@gmail.com') as email,
                     'Supervisor' as role,
                     trim(coalesce(sud.firstname,'') || ' ' || coalesce(sud.lastname,'')) as fullName
                 from securityuser su
@@ -544,8 +544,8 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
         left join lateral (
             select
-                max(case when pt.contactuse = 'phone' then pt.contactvalue end) as phone,
-                max(case when pt.contactuse = 'fax' then pt.contactvalue end) as fax
+                max(case when pt.contactuse = 'Work' then pt.contactvalue end) as phone,
+                max(case when pt.contactuse = 'Fax' then pt.contactvalue end) as fax
             from public.providertelecom pt
             where pt.providerid = p.providerid
               and pt.activeflag = true

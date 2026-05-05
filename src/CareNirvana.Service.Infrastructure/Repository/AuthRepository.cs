@@ -396,7 +396,7 @@ namespace CareNirvana.Service.Infrastructure.Repository
             // AUTH rule: selected WG/WB => assignedto NULL, else assignedto createdby
             int? authAssignedTo;
             if (requestType == "AUTH")
-                authAssignedTo = hasWgWb ? (int?)null : userId;
+                authAssignedTo = hasWgWb ? (int?)null : req.AuthAssignedTo;
             else
                 authAssignedTo = req.AuthAssignedTo; // don’t force for ACTIVITY here
 
@@ -442,6 +442,66 @@ namespace CareNirvana.Service.Infrastructure.Repository
             return authDetailId;
         }
 
+        //public async Task UpdateAuthAsync(long authDetailId, UpdateAuthRequest req, int userId)
+        //{
+        //    var requestType = (req.RequestType ?? "AUTH").Trim().ToUpperInvariant();
+        //    var ids = NormalizeWgWbIds(req.WorkgroupWorkbasketIds, req.WorkgroupWorkbasketId);
+        //    var hasWgWb = ids.Length > 0;
+
+        //    // AUTH assignment rules
+        //    var clearAuthAssignedTo = (requestType == "AUTH" && hasWgWb);
+        //    var setAssignedToCreator = (requestType == "AUTH" && !hasWgWb);
+
+        //    const string sql = @"
+        //update authdetail
+        //set authtypeid     = coalesce(@authTypeId, authtypeid),
+        //    authduedate     = coalesce(@authDueDate, authduedate),
+        //    nextreviewdate  = coalesce(@nextReviewDate, nextreviewdate),
+        //    treatementtype  = coalesce(@treatementType, treatementtype),
+        //    authclassid     = coalesce(@authClassId, authclassid),
+
+        //    authassignedto  = case
+        //                        when @clearAuthAssignedTo = true then null
+        //                        when @authAssignedTo is not null then @authAssignedTo
+        //                        else authassignedto
+        //                      end,
+
+        //    authstatus      = coalesce(@authStatus, authstatus),
+        //    data            = case when @jsonData is null then data else @jsonData::jsonb end,
+        //    updatedon       = now(),
+        //    updatedby       = @userId
+        //where authdetailid = @authDetailId
+        //  and deletedon is null;";
+
+        //    await using var conn = CreateConn();
+        //    await conn.ExecuteAsync(sql, new
+        //    {
+        //        authDetailId,
+        //        authTypeId = req.AuthTypeId,
+        //        authDueDate = req.AuthDueDate,
+        //        nextReviewDate = req.NextReviewDate,
+        //        treatementType = req.TreatementType,
+        //        authClassId = req.AuthClassId,
+
+        //        authAssignedTo = req.AuthAssignedTo,
+        //        clearAuthAssignedTo,
+
+        //        authStatus = req.AuthStatus,
+        //        jsonData = req.JsonData,
+        //        userId
+        //    });
+
+        //    // Keep authworkgroup rows in sync with selection for AUTH and ACTIVITY
+        //    await SaveAuthWorkgroupsAsync(new SaveAuthWorkgroupsRequest
+        //    {
+        //        RequestType = requestType,
+        //        AuthDetailId = authDetailId,
+        //        AuthActivityId = req.AuthActivityId,
+        //        WorkgroupWorkbasketIds = ids,
+        //        GroupStatusId = req.GroupStatusId
+        //    }, userId);
+        //}
+
         public async Task UpdateAuthAsync(long authDetailId, UpdateAuthRequest req, int userId)
         {
             var requestType = (req.RequestType ?? "AUTH").Trim().ToUpperInvariant();
@@ -452,30 +512,49 @@ namespace CareNirvana.Service.Infrastructure.Repository
             var clearAuthAssignedTo = (requestType == "AUTH" && hasWgWb);
             var setAssignedToCreator = (requestType == "AUTH" && !hasWgWb);
 
+            // ── DEBUG: dump incoming request ──────────────────────────────────────────
+            Console.WriteLine("=== UpdateAuthAsync DEBUG ===");
+            Console.WriteLine($"  authDetailId       : {authDetailId}");
+            Console.WriteLine($"  userId             : {userId}");
+            Console.WriteLine($"  req.RequestType    : '{req.RequestType}' → resolved: '{requestType}'");
+            Console.WriteLine($"  req.AuthAssignedTo : {req.AuthAssignedTo?.ToString() ?? "NULL"}");
+            Console.WriteLine($"  req.WorkgroupWorkbasketId  : {req.WorkgroupWorkbasketId?.ToString() ?? "NULL"}");
+            Console.WriteLine($"  ids (normalized)   : [{string.Join(", ", ids)}]  (length={ids.Length})");
+            Console.WriteLine($"  hasWgWb            : {hasWgWb}");
+            Console.WriteLine($"  clearAuthAssignedTo: {clearAuthAssignedTo}  ← if TRUE, authassignedto → NULL");
+            Console.WriteLine($"  setAssignedToCreator: {setAssignedToCreator}");
+            Console.WriteLine();
+            Console.WriteLine($"  EXPECTED SQL CASE outcome:");
+            if (clearAuthAssignedTo)
+                Console.WriteLine("    → authassignedto will be set to NULL (clearAuthAssignedTo=true)");
+            else if (req.AuthAssignedTo != null)
+                Console.WriteLine($"    → authassignedto will be set to {req.AuthAssignedTo}");
+            else
+                Console.WriteLine("    → authassignedto will be LEFT AS-IS (both conditions false/null)");
+            Console.WriteLine("=== END DEBUG INPUT ===");
+            // ─────────────────────────────────────────────────────────────────────────
+
             const string sql = @"
-        update authdetail
-        set authtypeid     = coalesce(@authTypeId, authtypeid),
-            authduedate     = coalesce(@authDueDate, authduedate),
-            nextreviewdate  = coalesce(@nextReviewDate, nextreviewdate),
-            treatementtype  = coalesce(@treatementType, treatementtype),
-            authclassid     = coalesce(@authClassId, authclassid),
-
-            authassignedto  = case
-                                when @clearAuthAssignedTo = true then null
-                                when @setAssignedToCreator = true then @userId
-                                when @authAssignedTo is null then authassignedto
-                                else @authAssignedTo
-                              end,
-
-            authstatus      = coalesce(@authStatus, authstatus),
-            data            = case when @jsonData is null then data else @jsonData::jsonb end,
-            updatedon       = now(),
-            updatedby       = @userId
-        where authdetailid = @authDetailId
-          and deletedon is null;";
+update authdetail
+set authtypeid     = coalesce(@authTypeId, authtypeid),
+    authduedate     = coalesce(@authDueDate, authduedate),
+    nextreviewdate  = coalesce(@nextReviewDate, nextreviewdate),
+    treatementtype  = coalesce(@treatementType, treatementtype),
+    authclassid     = coalesce(@authClassId, authclassid),
+    authassignedto  = case
+                        when @clearAuthAssignedTo = true then null
+                        when @authAssignedTo is not null then @authAssignedTo
+                        else authassignedto
+                      end,
+    authstatus      = coalesce(@authStatus, authstatus),
+    data            = case when @jsonData is null then data else @jsonData::jsonb end,
+    updatedon       = now(),
+    updatedby       = @userId
+where authdetailid = @authDetailId
+  and deletedon is null;";
 
             await using var conn = CreateConn();
-            await conn.ExecuteAsync(sql, new
+            var rowsAffected = await conn.ExecuteAsync(sql, new
             {
                 authDetailId,
                 authTypeId = req.AuthTypeId,
@@ -483,17 +562,39 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 nextReviewDate = req.NextReviewDate,
                 treatementType = req.TreatementType,
                 authClassId = req.AuthClassId,
-
                 authAssignedTo = req.AuthAssignedTo,
                 clearAuthAssignedTo,
-                setAssignedToCreator,
-
                 authStatus = req.AuthStatus,
                 jsonData = req.JsonData,
                 userId
             });
 
-            // Keep authworkgroup rows in sync with selection for AUTH and ACTIVITY
+            // ── DEBUG: verify row was actually updated ────────────────────────────────
+            Console.WriteLine($"=== SQL UPDATE rows affected: {rowsAffected} ===");
+            if (rowsAffected == 0)
+                Console.WriteLine("  !! WARNING: No rows updated — check authDetailId or deletedon filter !!");
+
+            // Read back what was actually saved
+            const string verifySql = @"
+                select authassignedto, authstatus, updatedby, updatedon
+                from authdetail
+                where authdetailid = @authDetailId;";
+
+            var saved = await conn.QuerySingleOrDefaultAsync(verifySql, new { authDetailId });
+            if (saved != null)
+            {
+                Console.WriteLine($"  DB authassignedto : {saved.authassignedto?.ToString() ?? "NULL"}");
+                Console.WriteLine($"  DB authstatus     : {saved.authstatus?.ToString() ?? "NULL"}");
+                Console.WriteLine($"  DB updatedby      : {saved.updatedby}");
+                Console.WriteLine($"  DB updatedon      : {saved.updatedon}");
+            }
+            else
+            {
+                Console.WriteLine("  !! WARNING: Could not find row after update !!");
+            }
+            Console.WriteLine("=== END DEBUG OUTPUT ===");
+            // ─────────────────────────────────────────────────────────────────────────
+
             await SaveAuthWorkgroupsAsync(new SaveAuthWorkgroupsRequest
             {
                 RequestType = requestType,
@@ -503,8 +604,6 @@ namespace CareNirvana.Service.Infrastructure.Repository
                 GroupStatusId = req.GroupStatusId
             }, userId);
         }
-
-
 
         public async Task SoftDeleteAuthAsync(long authDetailId, int userId)
         {

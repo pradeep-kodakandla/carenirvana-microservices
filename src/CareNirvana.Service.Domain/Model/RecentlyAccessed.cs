@@ -28,9 +28,10 @@ namespace CareNirvana.Service.Domain.Model
         public int MemberDetailsId { get; set; }
         public int? AuthDetailId { get; set; }
         public int? ComplaintDetailId { get; set; }
-        public string? MemberID { get; set; }              
-        public string? AuthNumber { get; set; }    
+        public string? MemberID { get; set; }
+        public string? AuthNumber { get; set; }
         public string? MemberName { get; set; }
+        public string? CaseNumber { get; set; }
     }
 
     public class Last24hCounts
