@@ -28,12 +28,30 @@ public class UserController : ControllerBase
             return BadRequest(new { error = "Invalid request payload" });
         }
 
-        var user = _userService.Authenticate(loginParam.UserName, loginParam.Password);
+        // Capture server-side context (more trustworthy than client-reported)
+        var serverIp = GetClientIpAddress();
+        var userAgent = Request.Headers["User-Agent"].ToString();
+
+        // Build a context object for the service layer
+        var loginContext = new LoginAttemptContext
+        {
+            ClientReportedIp = loginParam.IpAddress,
+            ServerObservedIp = serverIp,
+            Latitude = loginParam.Latitude,
+            Longitude = loginParam.Longitude,
+            LocationAccuracy = loginParam.LocationAccuracy,
+            UserAgent = userAgent,
+            AttemptedAt = DateTime.UtcNow
+        };
+
+        var user = _userService.Authenticate(loginParam.UserName, loginParam.Password, loginContext);
 
         if (user == null)
         {
+            // Log failed attempt with context (helpful for security auditing)
             return Unauthorized(new { error = "Username or password is incorrect" });
         }
+
 
         var tokenHandler = new JwtSecurityTokenHandler();
         var key = Encoding.ASCII.GetBytes(_configuration["Jwt:Secret"]);
@@ -41,9 +59,9 @@ public class UserController : ControllerBase
         {
             Subject = new ClaimsIdentity(new[]
             {
-                new Claim(ClaimTypes.Name, user.UserName),
-                new Claim(ClaimTypes.Role, "User")
-            }),
+            new Claim(ClaimTypes.Name, user.UserName),
+            new Claim(ClaimTypes.Role, "User")
+        }),
             Expires = DateTime.UtcNow.AddHours(1),
             SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
         };
@@ -57,8 +75,20 @@ public class UserController : ControllerBase
             Message = "Login successful!",
             UserId = user.UserId
         };
+        return Ok(response);
+    }
 
-        return Ok(response); // Simplified return, CORS middleware will handle headers
+    private string GetClientIpAddress()
+    {
+        // X-Forwarded-For if behind a proxy/load balancer (e.g., nginx, Azure, AWS ELB)
+        var forwardedFor = Request.Headers["X-Forwarded-For"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(forwardedFor))
+        {
+            // X-Forwarded-For can be a comma-separated list; the first entry is the original client
+            return forwardedFor.Split(',')[0].Trim();
+        }
+
+        return HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
     }
 
     [HttpGet("alluser")]

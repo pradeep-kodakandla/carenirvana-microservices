@@ -39,6 +39,51 @@ namespace CareNirvana.Service.Infrastructure.Repository
             return false;
         }
 
+        public void LogLoginAttempt(
+    string username,
+    int? userId,
+    bool success,
+    string? failureReason,
+    LoginAttemptContext context)
+        {
+            var sql = @"
+        INSERT INTO loginattempt
+            (userid, username, success, failurereason,
+             clientreportedip, serverobservedip,
+             latitude, longitude, locationaccuracy,
+             useragent, attemptedon)
+        VALUES
+            (@userid, @username, @success, @failurereason,
+             @clientreportedip, @serverobservedip,
+             @latitude, @longitude, @locationaccuracy,
+             @useragent, @attemptedon)";
+
+            var parameters = new Dictionary<string, object>
+    {
+        { "@userid",            (object?)userId ?? DBNull.Value },
+        { "@username",          username },
+        { "@success",           success },
+        { "@failurereason",     (object?)failureReason ?? DBNull.Value },
+        { "@clientreportedip",  (object?)context.ClientReportedIp ?? DBNull.Value },
+        { "@serverobservedip",  (object?)context.ServerObservedIp ?? DBNull.Value },
+        { "@latitude",          (object?)context.Latitude ?? DBNull.Value },
+        { "@longitude",         (object?)context.Longitude ?? DBNull.Value },
+        { "@locationaccuracy",  (object?)context.LocationAccuracy ?? DBNull.Value },
+        { "@useragent",         (object?)context.UserAgent ?? DBNull.Value },
+        { "@attemptedon",       context.AttemptedAt }
+    };
+
+            try
+            {
+                _dataLayer.ExectuteNonQuery(sql, parameters);
+            }
+            catch (Exception ex)
+            {
+                // Never let audit logging break the login flow
+                Console.WriteLine($"Failed to log login attempt: {ex.Message}");
+            }
+        }
+
         // 🔹 Get user from PostgreSQL
         public SecurityUser? GetUser(string username, string password)
         {

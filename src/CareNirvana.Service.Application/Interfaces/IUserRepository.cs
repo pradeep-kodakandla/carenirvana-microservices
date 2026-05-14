@@ -5,6 +5,12 @@ namespace CareNirvana.Service.Application.Interfaces
     public interface IUserRepository
     {
         bool ValidateUser(string userName, string password);
+        void LogLoginAttempt(
+    string username,
+    int? userId,
+    bool success,
+    string? failureReason,
+    LoginAttemptContext context);
         SecurityUser? GetUser(string username, string password);
         Task<List<SecurityUser>> GetUserDetails();
 

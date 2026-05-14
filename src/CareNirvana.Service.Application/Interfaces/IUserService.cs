@@ -4,7 +4,7 @@ namespace CareNirvana.Service.Application.Interfaces
 {
     public interface IUserService
     {
-        SecurityUser Authenticate(string username, string password);
+        SecurityUser Authenticate(string username, string password, LoginAttemptContext context);
         Task<List<SecurityUser>> GetUserDetails();
 
 

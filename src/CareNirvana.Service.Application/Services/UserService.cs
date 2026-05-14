@@ -16,10 +16,36 @@ namespace CareNirvana.Service.Application.Services
             _userRepository = userRepository;
         }
 
-        public SecurityUser Authenticate(string username, string password)
+        //public SecurityUser Authenticate(string username, string password, LoginAttemptContext context)
+        //{
+        //    var user = _userRepository.GetUser(username, password);
+        //    if (user == null) return null;
+        //    return user;
+        //}
+        public SecurityUser Authenticate(string username, string password, LoginAttemptContext context)
         {
             var user = _userRepository.GetUser(username, password);
-            if (user == null) return null;
+
+            if (user == null)
+            {
+                // Log failed attempt
+                _userRepository.LogLoginAttempt(
+                    username: username,
+                    userId: null,
+                    success: false,
+                    failureReason: "Invalid username or password",
+                    context: context);
+                return null;
+            }
+
+            // Log successful attempt
+            _userRepository.LogLoginAttempt(
+                username: user.UserName,
+                userId: user.UserId,
+                success: true,
+                failureReason: null,
+                context: context);
+
             return user;
         }
 
