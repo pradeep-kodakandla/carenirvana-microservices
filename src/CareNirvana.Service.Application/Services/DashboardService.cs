@@ -33,6 +33,8 @@ namespace CareNirvana.Service.Application.Services
         public Task<IReadOnlyList<AgCaseRow>> GetAgCasesAsync(int userId, CancellationToken ct = default) => _repo.GetAgCasesAsync(userId, ct);
 
         public Task<MemberDetailsResponseDto?> GetMemberDetailsAsync(int memberDetailsId) => _repo.GetMemberDetailsAsync(memberDetailsId);
+
+        public Task<SearchNavigationResult> SearchNavigationAsync(string module, string input) => _repo.SearchNavigationAsync(module, input);
     }
 
 }

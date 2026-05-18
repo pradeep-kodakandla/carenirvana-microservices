@@ -551,4 +551,20 @@ namespace CareNirvana.Service.Domain.Model
         [JsonPropertyName("updatedby")] public int? UpdatedBy { get; set; }
     }
 
+    public class SearchNavigationResult
+    {
+        public string? Type { get; set; } 
+        public int? MemberDetailsId { get; set; }
+        public int? MemberId { get; set; }
+        public int? AuthDetailId { get; set; }
+        public int? AuthTemplateId { get; set; }
+        public string? AuthNumber { get; set; }
+        public int? CaseHeaderId { get; set; }
+        public int? CaseTypeId { get; set; }
+        public int? CaseLevelId { get; set; }
+        public string? CaseNumber { get; set; }
+        public bool Found { get; set; }
+        public string? Message { get; set; }
+    }
+
 }

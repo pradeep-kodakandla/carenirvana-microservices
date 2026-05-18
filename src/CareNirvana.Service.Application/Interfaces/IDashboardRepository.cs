@@ -30,5 +30,7 @@ namespace CareNirvana.Service.Application.Interfaces
         Task<IReadOnlyList<AgCaseRow>> GetAgCasesAsync(int userId, CancellationToken ct = default);
 
         Task<MemberDetailsResponseDto?> GetMemberDetailsAsync(int memberDetailsId);
+
+        Task<SearchNavigationResult> SearchNavigationAsync(string module, string input);
     }
 }

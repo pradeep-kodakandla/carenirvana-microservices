@@ -2413,8 +2413,213 @@ WHERE faxid = @faxid;";
             return dto;
         }
 
+        public async Task<SearchNavigationResult> SearchNavigationAsync(string module, string input)
+        {
+            if (string.IsNullOrWhiteSpace(module))
+            {
+                return new SearchNavigationResult
+                {
+                    Found = false,
+                    Message = "Module is required. Valid values are CM, UM, AG."
+                };
+            }
+
+            if (string.IsNullOrWhiteSpace(input))
+            {
+                return new SearchNavigationResult
+                {
+                    Found = false,
+                    Message = "Search input is required."
+                };
+            }
+
+            module = module.Trim().ToUpper();
+            input = input.Trim();
+
+            await using var conn = new NpgsqlConnection(_connectionString);
+            await conn.OpenAsync();
+
+            switch (module)
+            {
+                case "CM":
+                    return await SearchMemberAsync(conn, input);
+
+                case "UM":
+                    return await SearchAuthAsync(conn, input);
+
+                case "AG":
+                    return await SearchCaseAsync(conn, input);
+
+                default:
+                    return new SearchNavigationResult
+                    {
+                        Found = false,
+                        Message = "Invalid module. Valid values are CM, UM, AG."
+                    };
+            }
+        }
+
+        private async Task<SearchNavigationResult> SearchMemberAsync(NpgsqlConnection conn, string input)
+        {
+            if (!int.TryParse(input, out int memberDetailsId))
+            {
+                return new SearchNavigationResult
+                {
+                    Found = false,
+                    Type = "CM",
+                    Message = "For CM search, input should be memberdetailsid."
+                };
+            }
+
+            const string sql = @"
+                SELECT 
+                    md.memberdetailsid,
+                    md.memberid
+                FROM memberdetails md
+                WHERE md.memberid = @memberdetailsid
+                LIMIT 1;";
+
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@memberdetailsid", memberDetailsId);
+
+            await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SingleRow);
+
+            if (await reader.ReadAsync())
+            {
+                return new SearchNavigationResult
+                {
+                    Found = true,
+                    Type = "CM",
+                    MemberDetailsId = reader.IsDBNull(reader.GetOrdinal("memberdetailsid"))
+                        ? null
+                        : reader.GetInt32(reader.GetOrdinal("memberdetailsid")),
+                    MemberId = reader.IsDBNull(reader.GetOrdinal("memberid"))
+                        ? null
+                        : reader.GetInt32(reader.GetOrdinal("memberid"))
+                };
+            }
+
+            return new SearchNavigationResult
+            {
+                Found = false,
+                Type = "CM",
+                Message = $"No member found for memberdetailsid: {input}"
+            };
+        }
+
+        private async Task<SearchNavigationResult> SearchAuthAsync(NpgsqlConnection conn, string input)
+        {
+            const string sql = @"
+                SELECT 
+                    md.memberdetailsid,
+                    md.memberid,
+                    ad.authdetailid,
+                    ad.authnumber,
+                    ad.authtypeid
+                FROM authdetail ad
+                JOIN memberdetails md 
+                    ON md.memberdetailsid = ad.memberdetailsid
+                WHERE upper(ad.authnumber) = upper(@authnumber)
+                LIMIT 1;";
+
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@authnumber", input);
+
+            await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SingleRow);
+
+            if (await reader.ReadAsync())
+            {
+                return new SearchNavigationResult
+                {
+                    Found = true,
+                    Type = "UM",
+                    MemberDetailsId = reader.IsDBNull(reader.GetOrdinal("memberdetailsid"))
+                        ? null
+                        : reader.GetInt32(reader.GetOrdinal("memberdetailsid")),
+                    MemberId = reader.IsDBNull(reader.GetOrdinal("memberid"))
+                        ? null
+                        : reader.GetInt32(reader.GetOrdinal("memberid")),
+                    AuthDetailId = reader.IsDBNull(reader.GetOrdinal("authdetailid"))
+                        ? null
+                        : reader.GetInt32(reader.GetOrdinal("authdetailid")),
+                    AuthNumber = reader.IsDBNull(reader.GetOrdinal("authnumber"))
+                        ? null
+                        : reader.GetString(reader.GetOrdinal("authnumber")),
+                    AuthTemplateId = reader.IsDBNull(reader.GetOrdinal("authtypeid"))
+                        ? null
+                        : reader.GetInt32(reader.GetOrdinal("authtypeid"))
+                };
+            }
+
+            return new SearchNavigationResult
+            {
+                Found = false,
+                Type = "UM",
+                Message = $"No authorization found for authnumber: {input}"
+            };
+        }
+
+        private async Task<SearchNavigationResult> SearchCaseAsync(NpgsqlConnection conn, string input)
+        {
+            const string sql = @"
+                SELECT 
+                    md.memberdetailsid,
+                    md.memberid,
+                    ch.caseheaderid,
+                    ch.casenumber,
+                    NULLIF(ch.casetype, '')::int AS casetypeid,
+                    cd.caselevelid
+                FROM caseheader ch
+                JOIN memberdetails md 
+                    ON md.memberdetailsid = ch.memberdetailid
+                LEFT JOIN LATERAL (
+                    SELECT MAX(cd2.caselevelid) AS caselevelid
+                    FROM casedetail cd2
+                    WHERE cd2.caseheaderid = ch.caseheaderid
+                      AND cd2.deletedon IS NULL
+                ) cd ON TRUE
+                WHERE upper(ch.casenumber) = upper(@casenumber)
+                LIMIT 1;";
+
+            await using var cmd = new NpgsqlCommand(sql, conn);
+            cmd.Parameters.AddWithValue("@casenumber", input);
+
+            await using var reader = await cmd.ExecuteReaderAsync(CommandBehavior.SingleRow);
+
+            if (await reader.ReadAsync())
+            {
+                return new SearchNavigationResult
+                {
+                    Found = true,
+                    Type = "AG",
+                    MemberDetailsId = reader.IsDBNull(reader.GetOrdinal("memberdetailsid"))
+                        ? null
+                        : reader.GetInt32(reader.GetOrdinal("memberdetailsid")),
+                    MemberId = reader.IsDBNull(reader.GetOrdinal("memberid"))
+                        ? null
+                        : reader.GetInt32(reader.GetOrdinal("memberid")),
+                    CaseHeaderId = reader.IsDBNull(reader.GetOrdinal("caseheaderid"))
+                        ? null
+                        : reader.GetInt32(reader.GetOrdinal("caseheaderid")),
+                    CaseNumber = reader.IsDBNull(reader.GetOrdinal("casenumber"))
+                        ? null
+                        : reader.GetString(reader.GetOrdinal("casenumber")),
+                    CaseTypeId = reader.IsDBNull(reader.GetOrdinal("casetypeid"))
+                        ? null
+                        : reader.GetInt32(reader.GetOrdinal("casetypeid")),
+                    CaseLevelId = reader.IsDBNull(reader.GetOrdinal("caselevelid"))
+                        ? null
+                        : reader.GetInt32(reader.GetOrdinal("caselevelid"))
+                };
+            }
+
+            return new SearchNavigationResult
+            {
+                Found = false,
+                Type = "AG",
+                Message = $"No case found for casenumber: {input}"
+            };
+        }
 
     }
-
-
 }

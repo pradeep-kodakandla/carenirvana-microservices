@@ -1,5 +1,6 @@
 ﻿using CareNirvana.Service.Application.Interfaces;
 using CareNirvana.Service.Domain.Model;
+using CareNirvana.Service.Infrastructure.Repository;
 using Microsoft.AspNetCore.Mvc;
 
 [Route("api/[controller]")]
@@ -198,6 +199,17 @@ public class DashBoardController : ControllerBase
     {
         var result = await _dashBoardService.GetMemberDetailsAsync(memberDetailsId);
         if (result is null) return NotFound();
+
+        return Ok(result);
+    }
+
+    [HttpGet("search-navigation/{module}/{input}")]
+    public async Task<IActionResult> SearchNavigation(string module, string input)
+    {
+        var result = await _dashBoardService.SearchNavigationAsync(module, input);
+
+        if (!result.Found)
+            return NotFound(result);
 
         return Ok(result);
     }
