@@ -856,7 +856,7 @@ where authdetailid = @authDetailId
             await using var tx = await conn.BeginTransactionAsync();
 
             // AUTH rule: keep authassignedto aligned with selection
-            if (requestType == "AUTH")
+            if (requestType == "AUTH" && ids.Length > 0)
             {
                 const string assignSql = @"
                     update authdetail

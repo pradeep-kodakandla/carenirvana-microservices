@@ -62,26 +62,67 @@ namespace CareNirvana.Service.Infrastructure.Repository
 
         public async Task<IReadOnlyList<AuthNoteDto>> GetNotesAsync(long authDetailId, CancellationToken ct = default)
         {
-            const string notesKey = "authNotes";
+            const string authNotesKey = "authNotes";
+            const string decisionNotesKey = "decisionNotes";
 
             const string sql = @"
-                select coalesce(
-                  (
-                    select jsonb_agg(n order by (n->>'createdOn')::timestamptz desc)
-                    from jsonb_array_elements(coalesce(a.data->@notesKey, '[]'::jsonb)) n
-                    where n->>'deletedBy' is null
-                  ),
-                  '[]'::jsonb
-                )::text as notes
-                from authdetail a
-                where a.authdetailid = @authDetailId
-                  and a.deletedon is null;";
+        select coalesce(
+          (
+            select jsonb_agg(x.note order by (x.note->>'createdOn')::timestamptz desc)
+            from (
+                -- Existing Auth Notes
+                select n as note
+                from jsonb_array_elements(coalesce(a.data->@authNotesKey, '[]'::jsonb)) n
+                where n->>'deletedBy' is null
+
+                union all
+
+                -- Decision Notes
+                select jsonb_build_object(
+                    'noteId',        d->>'itemId',
+                    'noteText',      d->'data'->>'authorizationNotes',
+                    'noteType',      nullif(d->'data'->>'authorizationNoteType', '')::int,
+                    'noteTypeLabel', d->'data'->>'authorizationNoteTypeLabel',
+                    'createdBy',     nullif(d->>'createdBy', '')::int,
+                    'createdOn',     d->>'createdOn',
+                    'updatedBy',     case when d->>'updatedBy' is null then null else nullif(d->>'updatedBy', '')::int end,
+                    'updatedOn',     d->>'updatedOn',
+                    'deletedBy',     case when d->>'deletedBy' is null then null else nullif(d->>'deletedBy', '')::int end,
+                    'deletedOn',     d->>'deletedOn',
+                    'alertEndDate',  null,
+                    'authAlertNote', coalesce((d->'data'->>'authorizationAlertNote')::boolean, false),
+                    'encounteredOn', d->'data'->>'noteEncounteredDatetime',
+                    'sourceType',    d->'data'->>'sourceType',
+                    'procedureNo',   d->'data'->>'procedureNo',
+                    'procedureCode', d->'data'->>'procedureCode',
+                    'procedureDescription', d->'data'->>'procedureDescription',
+                    'noteSource',    'DECISION'
+                ) as note
+                from jsonb_array_elements(coalesce(a.data->@decisionNotesKey, '[]'::jsonb)) d
+                where d->>'deletedBy' is null
+            ) x
+          ),
+          '[]'::jsonb
+        )::text as notes
+        from authdetail a
+        where a.authdetailid = @authDetailId
+          and a.deletedon is null;";
 
             await using var conn = CreateConn();
-            var notesJson = await conn.ExecuteScalarAsync<string>(
-                new CommandDefinition(sql, new { authDetailId, notesKey }, cancellationToken: ct));
 
-            return JsonSerializer.Deserialize<List<AuthNoteDto>>(notesJson ?? "[]", JsonOpts) ?? new List<AuthNoteDto>();
+            var notesJson = await conn.ExecuteScalarAsync<string>(
+                new CommandDefinition(
+                    sql,
+                    new
+                    {
+                        authDetailId,
+                        authNotesKey,
+                        decisionNotesKey
+                    },
+                    cancellationToken: ct));
+
+            return JsonSerializer.Deserialize<List<AuthNoteDto>>(notesJson ?? "[]", JsonOpts)
+                   ?? new List<AuthNoteDto>();
         }
 
 
